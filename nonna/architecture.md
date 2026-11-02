@@ -76,7 +76,7 @@ The specific legal entities that actually sign contracts. One counterparty can h
 | `full_text` | Full clause language |
 | `start_offset`, `end_offset` | Character positions in the contract, used for highlighting in the UI |
 | `presence` | present, absent, incorporated_by_reference |
-| `extraction_method` | deterministic or llm |
+| `extraction_method` | deterministic, llm, or manual (entered by a person) |
 | `confidence` | Nullable, mainly for LLM extractions |
 | `review_status` | pending, approved, rejected, corrected |
 
@@ -128,6 +128,9 @@ The current agreed baseline for each clause type with each counterparty. Too Man
 | `contract_type_scope` | Which contract types this baseline applies to (for example MSA and amendments, not NDAs) |
 | `baseline_clause_id` | The clause that represents the agreed position |
 | `set_by`, `set_at`, `note` | Who moved the baseline, when, and why |
+| `superseded_at` | Null for the current position. Set when a newer position replaces it, so the history of baselines is kept. |
+
+Only one current position can exist per counterparty, clause type, and scope.
 
 ## Example: one counterparty, three contracts
 
@@ -143,6 +146,18 @@ The current agreed baseline for each clause type with each counterparty. Too Man
 - **Hierarchy and precedence.** A SOW can override its MSA on some terms. An amendment supersedes what it amends. The effective position depends on the contract family tree, not only the newest date.
 - **Absent is not the same as not extracted.** A missing cap is the most dangerous drift, so "checked and not present" is stored as a real row, separate from "not reviewed yet."
 - **Human review gates the baseline.** LLM-extracted terms stay pending and never become a counterparty position until an attorney approves them.
+
+## How the database enforces these rules
+
+The schema in [`db/schema.sql`](db/schema.sql) enforces the rules above directly, so bad data is rejected by the database and not only by application code:
+
+- A contract's signing entity must belong to the same counterparty.
+- Duplicate uploads are rejected by file hash.
+- A clause marked present must have its text.
+- Each clause term stores exactly one value.
+- An `approved_change` decision must include a note.
+- Review decisions cannot be edited or deleted (append-only trigger).
+- A clause can only become a counterparty position if it was approved or corrected by a reviewer, belongs to that counterparty, and matches the clause type.
 
 ## File storage
 
