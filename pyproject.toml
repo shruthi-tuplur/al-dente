@@ -1,0 +1,10 @@
+[project]
+name = "al-dente"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.3.6",
+    "pytest>=9.2.0",
+    "python-dotenv>=1.2.4",
+    "sqlalchemy>=2.1.6",
+]
