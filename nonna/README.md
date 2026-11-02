@@ -18,7 +18,10 @@ Legal teams negotiate with the same companies over and over, but there is often 
 
 - Deterministic extraction for exact values (dollar amounts, dates, governing law).
 - LLM extraction for messier clause language (indemnification), always reviewed by a human.
-- Database designed so [Too Many Cooks](../too_many_cooks/) can compare new contracts against it.
+- Stores both full clause text and structured key terms, linked together for an audit trail.
+- Postgres database designed so [Too Many Cooks](../too_many_cooks/) can compare new contracts against it.
+
+See [architecture.md](architecture.md) for the full database design.
 
 ## MVP scope
 
