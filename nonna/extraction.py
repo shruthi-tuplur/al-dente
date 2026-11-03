@@ -78,7 +78,7 @@ class ExtractedTerm(BaseModel):
 
 class ExtractedClause(BaseModel):
     clause_type: str
-    status: Literal["found", "redacted", "not_found"]
+    status: Literal["found", "redacted", "inherited", "unchanged", "not_found"]
     clause_id: int | None
     section_number: str | None
     heading: str | None
@@ -309,8 +309,45 @@ def extract_contract(session: Session, contract_id: int) -> ExtractionResult:
     sections = split_sections(contract.full_text)
     results: list[ExtractedClause] = []
 
+    has_parent = contract.parent_contract_id is not None or contract.amends_contract_id is not None
+    incorporation = _find(
+        sections, ["incorporation"], r"incorporated into|subject to the Agreement|governed by the terms of the"
+    )
+
     for clause_type, finder in FINDERS.items():
         found = finder(sections)
+
+        # An amendment only changes what it mentions. Everything else stays as it was.
+        if found is None and contract.amends_contract_id is not None:
+            results.append(ExtractedClause(
+                clause_type=clause_type, status="unchanged", clause_id=None, section_number=None,
+                heading=None, snippet=None, method=None, terms=[],
+                note="This amendment doesn't change it.",
+            ))
+            continue
+
+        # A SOW or change order that doesn't restate a clause follows its MSA
+        if found is None and has_parent:
+            clause = Clause(
+                contract_id=contract.id,
+                clause_type=clause_type,
+                section_number=incorporation.number if incorporation else None,
+                heading=incorporation.heading if incorporation else None,
+                full_text=incorporation.text if incorporation else None,
+                presence="incorporated_by_reference",
+                extraction_method="deterministic",
+                review_status="pending",
+            )
+            session.add(clause)
+            session.flush()
+            results.append(ExtractedClause(
+                clause_type=clause_type, status="inherited", clause_id=clause.id,
+                section_number=clause.section_number, heading=clause.heading,
+                snippet=_snippet(clause.full_text) if clause.full_text else None,
+                method="deterministic", terms=[], note=None,
+            ))
+            continue
+
         if found is None:
             results.append(ExtractedClause(
                 clause_type=clause_type, status="not_found", clause_id=None, section_number=None,

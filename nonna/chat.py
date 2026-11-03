@@ -42,14 +42,15 @@ the review card.
 - Nonna tracks liability caps, indemnification, payment terms, and governing law. For any \
 other clause type, say Nonna doesn't track it yet. Drafting is not available yet either.
 - Do not give legal advice or opinions about whether a term is good. Report what was agreed.
-- If a question is ambiguous (which counterparty, which contract), ask one short question.
+- When the user asks for key details, an overview, or a profile of a counterparty, use \
+get_counterparty_profile. The app shows it as a card, so reply with one or two sentences and \
+mention anything that needs attention (like terms waiting for review).
 
 Style: warm, plain-spoken, and brief, like a trusted colleague who has worked with this team \
 for years. Lead with the direct answer in one sentence. Keep the whole reply under 80 words \
 unless the user asks for more detail. Mention only the most important source and any warning \
 (a pending review, a value mismatch). The app shows cards with the full details and every \
-source under your reply, so never list every clause or section in your text. Plain text only, \
-no markdown. Write amounts like $2,000,000."""
+source under your reply, so never list every clause or section in your text. You can use **bold** for key values and simple "- " bullet lists, but no headings or tables. Write amounts like $2,000,000."""
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -110,6 +111,21 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["counterparty_id", "clause_type"],
         },
     },
+        {
+        "name": "get_counterparty_profile",
+        "description": (
+            "Get a full overview of a counterparty in one call: its signing entities, every "
+            "contract (with which MSA each SOW or amendment belongs to), every currently agreed "
+            "term with its source, and how many extracted terms are waiting for review. Use this "
+            "when the user asks for key details, an overview, a summary, or a profile of a "
+            "counterparty."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"counterparty_id": {"type": "integer"}},
+            "required": ["counterparty_id"],
+        },
+    },
     {
         "name": "get_review_queue",
         "description": (
@@ -129,6 +145,7 @@ STATUS_FOR_TOOL = {
     "get_current_positions": "Checked current terms",
     "get_clause_history": "Looked through the history",
     "get_review_queue": "Checked the review queue",
+    "get_counterparty_profile": "Pulled the full profile",
 }
 
 CLAUSE_LABELS = {
@@ -183,6 +200,17 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         history = lookups.get_clause_history(session, tool_input["counterparty_id"], clause_type)
         data = [h.model_dump(mode="json") for h in history]
         _add_card(cards, Card(type="history", title=f"{CLAUSE_LABELS[clause_type]} history", data=data))
+        return data
+
+    if name == "get_counterparty_profile":
+        counterparty_id = tool_input["counterparty_id"]
+        detail = lookups.get_counterparty_detail(session, counterparty_id)
+        data = {
+            "counterparty": detail.model_dump(mode="json"),
+            "positions": [p.model_dump(mode="json") for p in lookups.get_positions(session, counterparty_id)],
+            "pending_review": len(lookups.get_review_queue(session, counterparty_id)),
+        }
+        _add_card(cards, Card(type="profile", title=detail.name, data=data))
         return data
 
     if name == "get_review_queue":
@@ -244,6 +272,8 @@ def run_chat(session: Session, history: list[ChatMessage]) -> ChatResponse:
             status=status,
             cards=cards,
         )
-
+        # The profile card already shows the contracts and agreed terms, so don't repeat them
+    if any(card.type == "profile" for card in cards):
+        cards = [c for c in cards if c.type not in ("contracts", "positions")]
     reply = "".join(block.text for block in response.content if block.type == "text").strip()
     return ChatResponse(reply=reply or "I'm not sure how to answer that.", status=status, cards=cards)

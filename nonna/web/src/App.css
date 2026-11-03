@@ -500,3 +500,179 @@
 .review-rejected {
   color: var(--espresso-muted);
 }
+
+
+/* Cards under Nonna's chat replies */
+.nonna-card {
+  margin-top: 12px;
+  width: 100%;
+  max-width: 560px;
+  background: #ffffff;
+  border: 1px solid #e6e0d8;
+  border-radius: 14px;
+  padding: 18px 20px;
+  font-size: 15px;
+}
+
+.card-title {
+  margin: 0;
+  font-weight: 500;
+  font-size: 17px;
+}
+
+.card-subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.card-section {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--espresso-muted);
+}
+
+.nonna-card > .card-title + .card-rows,
+.nonna-card > .card-title + .timeline {
+  margin-top: 12px;
+}
+
+.card-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.card-label {
+  color: var(--espresso-muted);
+}
+
+.card-value {
+  font-weight: 500;
+  text-align: right;
+}
+
+.card-meta {
+  font-size: 13px;
+  color: var(--espresso-muted);
+  white-space: nowrap;
+}
+
+.card-empty {
+  margin: 8px 0 0;
+  color: var(--espresso-muted);
+  font-size: 14px;
+}
+
+.doc-type {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  background: #f3efe8;
+  font-size: 12px;
+  color: var(--espresso);
+}
+
+.doc-group > .card-rows {
+  gap: 8px;
+}
+
+.doc-nested {
+  margin-left: 18px;
+  padding-left: 12px;
+  border-left: 2px solid #efeae3;
+}
+
+.card-pending {
+  margin: 16px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(224, 176, 94, 0.18);
+  font-size: 14px;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid #efeae3;
+  display: grid;
+  gap: 14px;
+}
+
+.decision-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--espresso);
+}
+
+
+/* "Falls under" dropdown on the intake card */
+.parent-select {
+  max-width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: var(--espresso);
+  padding: 6px 10px;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.parent-select:focus {
+  outline: none;
+  border-color: var(--espresso);
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+
+/* Light formatting in Nonna's replies */
+.nonna-text p {
+  margin: 0 0 10px;
+}
+
+.nonna-text p:last-child,
+.nonna-text ul:last-child {
+  margin-bottom: 0;
+}
+
+.nonna-text ul {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.nonna-text li {
+  margin-bottom: 4px;
+}
+
+.nonna-text strong {
+  font-weight: 500;
+  color: var(--espresso);
+}
+
+/* Approve all */
+.approve-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.approve-all-summary {
+  font-size: 13px;
+  color: var(--espresso);
+}

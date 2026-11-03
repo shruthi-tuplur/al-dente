@@ -2,7 +2,7 @@
 
 export type Role = 'user' | 'nonna'
 
-export type CardType = 'positions' | 'history' | 'contracts' | 'review_queue'
+export type CardType = 'profile' | 'positions' | 'history' | 'contracts' | 'review_queue'
 
 export interface Card {
   type: CardType
@@ -26,6 +26,13 @@ export interface ProposedParty {
   matches: CounterpartyMatch[]
 }
 
+export interface ParentOption {
+  id: number
+  title: string
+  contract_type: ContractType
+  effective_date: string
+}
+
 export interface IntakeProposal {
   file_hash: string
   filename: string
@@ -40,6 +47,9 @@ export interface IntakeProposal {
   quotes: Record<string, string>
   unverified: string[]
   excerpt: string
+  parent_options: ParentOption[]
+  suggested_parent_id: number | null
+  parent_quote: string | null
 }
 
 export interface Message {
@@ -121,6 +131,7 @@ export interface SaveContractRequest {
   effective_date: string
   counterparty_legal_name: string
   counterparty_id: number | null
+  parent_contract_id: number | null
   uploaded_by: string
 }
 
@@ -156,7 +167,7 @@ export interface ExtractedTerm {
 
 export interface ExtractedClause {
   clause_type: 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification'
-  status: 'found' | 'redacted' | 'not_found'
+  status: 'found' | 'redacted' | 'inherited' | 'unchanged' | 'not_found'
   clause_id: number | null
   section_number: string | null
   heading: string | null

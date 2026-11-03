@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { useBulkReview, ReviewResult } from './bulkReview'
 import { BaselineConflictError, reviewClause } from './nonnaApi'
 import type { ReviewAction } from './nonnaApi'
 
@@ -8,12 +9,29 @@ type State =
   | { kind: 'conflict'; message: string }
   | { kind: 'done'; message: string; approved: boolean }
 
+interface Props {
+  clauseId: number
+  external?: ReviewResult // a result from "Approve all"
+  onResolved?: () => void // tells the parent this clause is decided
+}
+
 // Approve or reject one extracted clause. These buttons call the API directly,
 // so the LLM never approves anything.
-export default function ReviewControls({ clauseId }: { clauseId: number }) {
+export default function ReviewControls({ clauseId, external, onResolved }: Props) {
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+
+  // Show results that came from "Approve all"
+  useEffect(() => {
+    if (!external) return
+    if (external.kind === 'error') {
+      setError(external.message)
+    } else {
+      setError('')
+      setState(external)
+    }
+  }, [external])
 
   async function submit(action: ReviewAction, withNote?: string) {
     const previous = state
@@ -22,6 +40,7 @@ export default function ReviewControls({ clauseId }: { clauseId: number }) {
     try {
       const outcome = await reviewClause(clauseId, action, withNote)
       setState({ kind: 'done', message: outcome.message, approved: action !== 'rejected' })
+      onResolved?.()
     } catch (err) {
       if (err instanceof BaselineConflictError) {
         setState({ kind: 'conflict', message: err.message })
@@ -93,6 +112,26 @@ export default function ReviewControls({ clauseId }: { clauseId: number }) {
       </div>
 
       {error && <p className="intake-error">{error}</p>}
+    </div>
+  )
+}
+
+// The "Approve all" button that sits above a list of extracted clauses
+export function ApproveAllBar({ bulk }: { bulk: ReturnType<typeof useBulkReview> }) {
+  if (bulk.pending.length < 2 && !bulk.summary) return null
+  return (
+    <div className="approve-all">
+      {bulk.pending.length >= 2 && (
+        <button
+          type="button"
+          className="btn btn-sm btn-primary"
+          disabled={bulk.busy}
+          onClick={() => void bulk.approveAll()}
+        >
+          {bulk.busy ? 'Approving…' : `Approve all (${bulk.pending.length})`}
+        </button>
+      )}
+      {bulk.summary && <span className="approve-all-summary">{bulk.summary}</span>}
     </div>
   )
 }

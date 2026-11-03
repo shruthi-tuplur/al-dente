@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import ReviewControls from './ReviewControls'
+import { useBulkReview } from './bulkReview'
+import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import { CURRENT_USER, extractContract, saveContract } from './nonnaApi'
 import type {
   ContractType,
@@ -96,10 +97,21 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
   const [saved, setSaved] = useState<SavedContract | null>(null)
   const [extracted, setExtracted] = useState<ExtractionResult | null>(null)
   const [extractError, setExtractError] = useState('')
+  const [parentId, setParentId] = useState<number | null>(proposal.suggested_parent_id)
+  const bulk = useBulkReview(
+    (extracted?.clauses ?? []).flatMap((c) => (c.clause_id === null ? [] : [c.clause_id])),
+  )
 
   const ours = oursIndex === null ? null : proposal.parties[oursIndex]
   const others = proposal.parties.filter((_, i) => i !== oursIndex)
   const typeLabel = details.contractType ? TYPE_LABELS[details.contractType] : 'contract'
+
+  // SOWs and change orders fall under a contract, and amendments change one
+  const needsParent = ['SOW', 'amendment', 'change_order'].includes(details.contractType)
+  const parentChoices = proposal.parent_options.filter((o) =>
+    details.contractType === 'change_order' ? true : o.contract_type === 'MSA',
+  )
+  const parentLabel = details.contractType === 'amendment' ? 'Amends' : 'Falls under'
 
   // Built from the extracted data, never written by the LLM
   const headline = ours
@@ -132,6 +144,7 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
         effective_date: details.effectiveDate,
         counterparty_legal_name: counterparty.legal_name,
         counterparty_id: counterparty.matches[0]?.id ?? null,
+        parent_contract_id: needsParent ? parentId : null,
         uploaded_by: CURRENT_USER,
       })
       setSaved(result)
@@ -271,6 +284,38 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
                 </dd>
               </div>
             ))}
+                        {needsParent && ours && (
+              <div>
+                <dt>{parentLabel}</dt>
+                <dd>
+                  {parentChoices.length === 0 ? (
+                    <span className="match">
+                      No MSA on file for this counterparty yet. You can still save it, it just won't
+                      be linked.
+                    </span>
+                  ) : (
+                    <>
+                      <select
+                        className="parent-select"
+                        value={parentId ?? ''}
+                        disabled={mode !== 'review'}
+                        onChange={(e) => setParentId(e.target.value === '' ? null : Number(e.target.value))}
+                      >
+                        <option value="">Not linked</option>
+                        {parentChoices.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.title} ({formatDate(option.effective_date)})
+                          </option>
+                        ))}
+                      </select>
+                      {parentId !== null && parentId === proposal.suggested_parent_id && proposal.parent_quote && (
+                        <span className="quote">"{proposal.parent_quote}"</span>
+                      )}
+                    </>
+                  )}
+                </dd>
+              </div>
+            )}
           </dl>
 
           {ours === null && mode === 'review' && (
@@ -337,6 +382,7 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
           {extracted && (
             <div className="extracted">
               <p className="extracted-title">Key terms (waiting for your review)</p>
+              <ApproveAllBar bulk={bulk} />
               <ul>
                 {extracted.clauses.map((clause) => {
                   const value = describeTerms(clause)
@@ -347,6 +393,8 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
                         <span className="extracted-value">
                           {clause.status === 'found' && (value ?? 'Found, no value pulled')}
                           {clause.status === 'redacted' && 'Redacted'}
+                          {clause.status === 'inherited' && 'Follows the MSA'}
+                          {clause.status === 'unchanged' && 'Unchanged'}
                           {clause.status === 'not_found' && 'Not found'}
                         </span>
                       </div>
@@ -358,7 +406,13 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
                         </span>
                       )}
                       {clause.note && <span className="extracted-note">⚠ {clause.note}</span>}
-                      {clause.clause_id !== null && <ReviewControls clauseId={clause.clause_id} />}
+                      {clause.clause_id !== null && (
+                        <ReviewControls
+                          clauseId={clause.clause_id}
+                          external={bulk.results[clause.clause_id]}
+                          onResolved={() => bulk.markResolved(clause.clause_id!)}
+                        />
+                      )}
                     </li>
                   )
                 })}

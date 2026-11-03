@@ -161,7 +161,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
-CardType = Literal["positions", "history", "contracts", "review_queue"]
+CardType = Literal["profile", "positions", "history", "contracts", "review_queue"]
 
 
 class Card(BaseModel):

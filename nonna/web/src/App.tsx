@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
+import CardView from './CardView'
 import IntakeCard from './IntakeCard'
+import RichText from './RichText'
 import { askNonna, uploadContract } from './nonnaApi'
 import type { Message } from './nonnaApi'
 import './App.css'
@@ -126,8 +128,11 @@ export default function App() {
                   <p className="thinking">Thinking…</p>
                 ) : (
                   <>
-                    <p className="nonna-text">{m.text}</p>
+                    <div className="nonna-text">
+  <RichText text={m.text} />
+</div>
                     {m.status && <p className="status">{m.status}</p>}
+                    {m.cards?.map((card, i) => <CardView key={i} card={card} />)}
                     {m.intake && <IntakeCard proposal={m.intake} />}
                   </>
                 )}

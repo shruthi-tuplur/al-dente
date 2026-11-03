@@ -16,7 +16,7 @@ import hashlib
 import io
 import os
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -67,6 +67,13 @@ class ProposedParty(BaseModel):
     is_our_company: bool
     matches: list[CounterpartySummary]  # existing counterparties with a similar name
 
+class ParentOption(BaseModel):
+    """An existing contract this upload might belong to (like the MSA a SOW falls under)."""
+
+    id: int
+    title: str
+    contract_type: str
+    effective_date: date
 
 class IntakeProposal(BaseModel):
     file_hash: str
@@ -82,6 +89,9 @@ class IntakeProposal(BaseModel):
     quotes: dict[str, str]  # field name -> verified quote from the document
     unverified: list[str]  # fields whose quote could not be found in the document
     excerpt: str  # the first part of the text, for a quick look
+    parent_options: list[ParentOption]  # contracts this one could fall under or amend
+    suggested_parent_id: int | None  # picked from a phrase like "Agreement dated March 1, 2025"
+    parent_quote: str | None  # the phrase nonna used to pick it
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +175,39 @@ def _parse_date(value: str | None) -> date | None:
     except ValueError:
         return None
 
+PARENT_REFERENCE = re.compile(
+    r"Agreement[^.]{0,80}?dated\s+(?:as of\s+)?([A-Z][a-z]+\s+\d{1,2},\s+\d{4})"
+)
+
+
+def _suggest_parent(
+    session: Session, counterparty_ids: list[int], opening: str
+) -> tuple[list[ParentOption], int | None, str | None]:
+    """List the counterparty's existing contracts and guess which one this upload falls under."""
+    if not counterparty_ids:
+        return [], None, None
+    rows = session.scalars(
+        select(Contract)
+        .where(Contract.counterparty_id.in_(counterparty_ids), Contract.contract_type.in_(["MSA", "SOW"]))
+        .order_by(Contract.effective_date)
+    ).all()
+    options = [
+        ParentOption(id=c.id, title=c.title, contract_type=c.contract_type, effective_date=c.effective_date)
+        for c in rows
+    ]
+
+    flat = re.sub(r"\s+", " ", opening)
+    for match in PARENT_REFERENCE.finditer(flat):
+        try:
+            referenced = datetime.strptime(match.group(1), "%B %d, %Y").date()
+        except ValueError:
+            continue
+        for option in options:
+            if option.contract_type == "MSA" and option.effective_date == referenced:
+                return options, option.id, match.group(0)
+
+    msas = [o for o in options if o.contract_type == "MSA"]
+    return options, (msas[-1].id if len(msas) == 1 else None), None
 
 def extract_text(data: bytes, kind: str) -> tuple[str, int | None]:
     """Return the document's text and page count (page count is unknown for Word files)."""
@@ -275,6 +318,11 @@ def propose(session: Session, filename: str, data: bytes) -> IntakeProposal:
                 matches=[] if is_ours else lookups.find_counterparties(session, core),
             )
         )
+    
+    counterparty_ids = sorted({m.id for p in parties if not p.is_our_company for m in p.matches})
+    parent_options, suggested_parent_id, parent_quote = _suggest_parent(
+        session, counterparty_ids, text[:OPENING_CHARS]
+    )
 
     contract_type = details.get("contract_type")
     return IntakeProposal(
@@ -291,6 +339,9 @@ def propose(session: Session, filename: str, data: bytes) -> IntakeProposal:
         quotes=quotes,
         unverified=unverified,
         excerpt=text[:EXCERPT_CHARS],
+        parent_options=parent_options,
+        suggested_parent_id=suggested_parent_id,
+        parent_quote=parent_quote,
     )
 
 
@@ -309,6 +360,7 @@ class IntakeConfirm(BaseModel):
     effective_date: date
     counterparty_legal_name: str = Field(min_length=1)
     counterparty_id: int | None = None  # an existing counterparty to add this to; None creates one
+    parent_contract_id: int | None = None  # the MSA a SOW falls under, or the contract an amendment changes
     uploaded_by: str = Field(min_length=1)
 
 
@@ -365,8 +417,32 @@ def save(session: Session, confirm: IntakeConfirm) -> SavedContract:
         session.flush()
         created_entity = True
 
+    # Link SOWs and change orders to their parent, and amendments to what they amend
+    parent_id = amends_id = None
+    if confirm.parent_contract_id is not None:
+        parent = session.get(Contract, confirm.parent_contract_id)
+        if parent is None or parent.counterparty_id != counterparty.id:
+            raise IntakeError("That parent contract doesn't belong to this counterparty.")
+        if confirm.contract_type == "amendment":
+            amends_id = parent.id
+        elif confirm.contract_type in ("SOW", "change_order"):
+            parent_id = parent.id
+
+    # Link SOWs and change orders to their parent, and amendments to what they amend
+    parent_id = amends_id = None
+    if confirm.parent_contract_id is not None:
+        parent = session.get(Contract, confirm.parent_contract_id)
+        if parent is None or parent.counterparty_id != counterparty.id:
+            raise IntakeError("That parent contract doesn't belong to this counterparty.")
+        if confirm.contract_type == "amendment":
+            amends_id = parent.id
+        elif confirm.contract_type in ("SOW", "change_order"):
+            parent_id = parent.id
+
     contract = Contract(
         counterparty_id=counterparty.id,
+        parent_contract_id=parent_id,
+        amends_contract_id=amends_id,
         entity_id=entity.id,
         contract_type=confirm.contract_type,
         title=confirm.title.strip(),
