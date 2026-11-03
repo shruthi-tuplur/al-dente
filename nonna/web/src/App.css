@@ -1,0 +1,201 @@
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header and logo */
+.header {
+  padding: 24px 40px 8px;
+}
+
+.logo {
+  margin: 0;
+  font-family: var(--font-logo);
+  font-weight: 400;
+  font-size: 40px;
+  line-height: 1;
+  color: var(--nonna-red);
+  -webkit-text-stroke: 0.4px var(--nonna-red);
+}
+
+/* Conversation */
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 40px;
+}
+
+.thread {
+  max-width: 1200px;
+  min-height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.empty {
+  margin: auto;
+  text-align: center;
+  color: var(--espresso-muted);
+}
+
+.row {
+  display: flex;
+}
+
+.row-user {
+  justify-content: flex-end;
+}
+
+.bubble {
+  position: relative;
+  max-width: min(70%, 640px);
+  background: var(--user-bubble);
+  padding: 18px 28px;
+  border-radius: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+
+.row-nonna {
+  flex-direction: column;
+  align-items: flex-start;
+  padding-left: 28px;
+}
+
+.nonna-text {
+  margin: 0;
+  max-width: 680px;
+  white-space: pre-wrap;
+}
+
+.status {
+  margin: 4px 0 0;
+  font-size: 16px;
+  color: var(--espresso-muted);
+}
+
+/* Thinking state: a saffron lamp glow */
+.thinking {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--espresso-muted);
+}
+
+.thinking::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--saffron);
+  animation: lamp 1.4s ease-in-out infinite;
+}
+
+@keyframes lamp {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--saffron-glow);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(224, 176, 94, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking::before {
+    animation: none;
+  }
+}
+
+/* Message box */
+.composer-wrap {
+  padding: 12px 40px 24px;
+}
+
+.composer {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1px solid var(--espresso);
+  border-radius: 22px;
+  padding: 4px 4px 4px 18px;
+  transition: box-shadow 0.15s ease;
+}
+.composer:focus-within {
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+.composer-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  resize: none;
+  padding: 0;
+  font-size: 16px;
+  line-height: 22px;
+  max-height: 200px;
+}
+
+.composer-input::placeholder {
+  color: var(--espresso-muted);
+  opacity: 1;
+}
+
+.send {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--espresso);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
+}
+
+.send:hover {
+  transform: translateX(3px);
+}
+.send:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+/* Phones */
+@media (max-width: 640px) {
+  .header,
+  .chat,
+  .composer-wrap {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+
+
+  .bubble {
+    max-width: 85%;
+    padding: 14px 18px;
+  }
+
+  
+  .row-nonna {
+    padding-left: 4px;
+  }
+
+  .composer {
+    padding-left: 20px;
+  }
+}

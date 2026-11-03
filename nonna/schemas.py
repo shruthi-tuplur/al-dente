@@ -7,7 +7,7 @@ Numbers from the database (like cap amounts) are sent as strings, for example
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -143,3 +143,36 @@ class ReviewIn(BaseModel):
         if self.action == "approved_change" and not (self.note and self.note.strip()):
             raise ValueError("A note is required when approving an intentional change.")
         return self
+
+
+
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    """The conversation so far, oldest first, ending with the user's new message."""
+
+    messages: list[ChatMessage] = Field(min_length=1)
+
+
+CardType = Literal["positions", "history", "contracts", "review_queue"]
+
+
+class Card(BaseModel):
+    """Something the app shows under Nonna's reply. The data comes from the database."""
+
+    type: CardType
+    title: str
+    data: Any
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    status: str | None = None
+    cards: list[Card]

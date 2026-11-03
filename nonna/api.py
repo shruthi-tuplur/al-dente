@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-
+from nonna import chat
 from nonna.database import get_session
 from nonna.models import (
     Clause,
@@ -35,6 +35,8 @@ from nonna.schemas import (
     ReviewQueueItem,
     SourceContract,
     TermOut,
+    ChatRequest,
+    ChatResponse,
 )
 
 app = FastAPI(
@@ -292,3 +294,13 @@ def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> Deci
 
     session.refresh(decision)
     return to_decision(decision)
+
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat_with_nonna(request: ChatRequest, session: SessionDep) -> ChatResponse:
+    """Ask Nonna a question. She answers from the database and returns cards to show."""
+    try:
+        return chat.run_chat(session, request.messages)
+    except chat.ChatUnavailable as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error

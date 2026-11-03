@@ -1,0 +1,45 @@
+/* Nonna design tokens (see nonna/design.md) */
+:root {
+  --cream: #FAF8F5;
+  --warm-white: #fffaf2;
+  --espresso: #2b1d14;
+  --espresso-muted: #6b5444;
+  --nonna-red: #8b1c16;
+  --basil: #525e35;
+  --saffron: #e0b05e;
+  --saffron-glow: rgba(224, 176, 94, 0.55);
+
+  --page: var(--cream);
+    --user-bubble: #EFEBE5;
+
+  --font-body: 'DM Sans', system-ui, sans-serif;
+  --font-logo: 'Sacramento', cursive;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--espresso);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+textarea {
+  font: inherit;
+  color: inherit;
+}
