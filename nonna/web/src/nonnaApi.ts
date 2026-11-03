@@ -79,7 +79,7 @@ async function errorDetail(response: Response, fallback: string): Promise<string
 // Send the whole conversation (Nonna doesn't remember between requests on her own)
 export async function askNonna(conversation: Message[]): Promise<NonnaReply> {
   const messages = conversation
-    .filter((m) => !m.pending && m.text.trim() !== '')
+    .filter((m) => !m.pending && !m.attachment && !m.intake && m.text.trim() !== '')
     .map((m) => ({ role: m.role === 'nonna' ? 'assistant' : 'user', content: m.text }))
 
   const response = await fetch('/api/chat', {
@@ -108,4 +108,111 @@ export async function uploadContract(file: File): Promise<IntakeProposal> {
   }
 
   return (await response.json()) as IntakeProposal
+}
+
+
+// No login yet, so every action is recorded under this name
+export const CURRENT_USER = 'demo.attorney'
+
+export interface SaveContractRequest {
+  file_hash: string
+  title: string
+  contract_type: ContractType
+  effective_date: string
+  counterparty_legal_name: string
+  counterparty_id: number | null
+  uploaded_by: string
+}
+
+export interface SavedContract {
+  contract_id: number
+  counterparty_id: number
+  counterparty_name: string
+  created_counterparty: boolean
+  created_entity: boolean
+}
+
+// Save a contract after the attorney confirms its details
+export async function saveContract(request: SaveContractRequest): Promise<SavedContract> {
+  const response = await fetch('/api/contracts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Nonna couldn't save that contract (error ${response.status}).`))
+  }
+
+  return (await response.json()) as SavedContract
+}
+
+
+export interface ExtractedTerm {
+  term_key: string
+  value: string | boolean | null
+  unit: string | null
+}
+
+export interface ExtractedClause {
+  clause_type: 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification'
+  status: 'found' | 'redacted' | 'not_found'
+  clause_id: number | null
+  section_number: string | null
+  heading: string | null
+  snippet: string | null
+  method: string | null
+  terms: ExtractedTerm[]
+  note: string | null
+}
+
+export interface ExtractionResult {
+  contract_id: number
+  clauses: ExtractedClause[]
+}
+
+// Pull the key terms out of a saved contract (saved as pending review)
+export async function extractContract(contractId: number): Promise<ExtractionResult> {
+  const response = await fetch(`/api/contracts/${contractId}/extract`, { method: 'POST' })
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Nonna couldn't pull the key terms (error ${response.status}).`))
+  }
+
+  return (await response.json()) as ExtractionResult
+
+}
+
+
+
+export type ReviewAction = 'approved' | 'rejected' | 'approved_change'
+
+export interface ReviewOutcome {
+  baseline: 'created' | 'moved' | 'unchanged' | 'none'
+  message: string
+}
+
+// Thrown when a clause differs from the agreed baseline and needs a note to approve
+export class BaselineConflictError extends Error {}
+
+// Record an attorney's decision about one extracted clause
+export async function reviewClause(
+  clauseId: number,
+  action: ReviewAction,
+  note?: string,
+): Promise<ReviewOutcome> {
+  const response = await fetch(`/api/clauses/${clauseId}/reviews`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, reviewer: CURRENT_USER, note: note ?? null }),
+  })
+
+  if (response.status === 409) {
+    throw new BaselineConflictError(await errorDetail(response, "This doesn't match the agreed baseline."))
+  }
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Nonna couldn't save that decision (error ${response.status}).`))
+  }
+
+  return (await response.json()) as ReviewOutcome
 }

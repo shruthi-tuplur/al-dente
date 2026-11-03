@@ -23,14 +23,15 @@ from typing import Any, Literal
 import anthropic
 from docx import Document
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from nonna import lookups
-from nonna.models import Contract
+from nonna.models import Contract, Counterparty, CounterpartyEntity
 from nonna.schemas import CounterpartySummary
 
 load_dotenv()
@@ -290,4 +291,104 @@ def propose(session: Session, filename: str, data: bytes) -> IntakeProposal:
         quotes=quotes,
         unverified=unverified,
         excerpt=text[:EXCERPT_CHARS],
+    )
+
+
+
+
+# ---------------------------------------------------------------------------
+# Saving a confirmed contract
+# ---------------------------------------------------------------------------
+
+class IntakeConfirm(BaseModel):
+    """What the attorney confirmed (or corrected) on the intake card."""
+
+    file_hash: str
+    title: str = Field(min_length=1)
+    contract_type: ContractType
+    effective_date: date
+    counterparty_legal_name: str = Field(min_length=1)
+    counterparty_id: int | None = None  # an existing counterparty to add this to; None creates one
+    uploaded_by: str = Field(min_length=1)
+
+
+class SavedContract(BaseModel):
+    contract_id: int
+    counterparty_id: int
+    counterparty_name: str
+    created_counterparty: bool
+    created_entity: bool
+
+
+def save(session: Session, confirm: IntakeConfirm) -> SavedContract:
+    """Save a confirmed contract, creating the counterparty and signing entity if they're new."""
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", confirm.file_hash):
+        raise IntakeError("Nonna doesn't recognize that upload. Try uploading the file again.")
+    digest = confirm.file_hash.removeprefix("sha256:")
+    stored = next(STORAGE_DIR.glob(f"{digest}.*"), None)
+    if stored is None:
+        raise IntakeError("Nonna can't find that upload anymore. Try uploading the file again.")
+    if session.scalar(select(Contract.id).where(Contract.file_hash == confirm.file_hash)):
+        raise IntakeError("This exact file is already saved in nonna.")
+
+    text, _ = extract_text(stored.read_bytes(), ALLOWED_TYPES[stored.suffix.lower()])
+    legal_name = confirm.counterparty_legal_name.strip()
+
+    # The counterparty (the relationship)
+    created_counterparty = False
+    if confirm.counterparty_id is not None:
+        counterparty = session.get(Counterparty, confirm.counterparty_id)
+        if counterparty is None:
+            raise IntakeError("That counterparty doesn't exist in nonna.")
+    else:
+        name = _core_name(legal_name)
+        counterparty = session.scalar(
+            select(Counterparty).where(func.lower(Counterparty.name) == name.lower())
+        )
+        if counterparty is None:
+            counterparty = Counterparty(name=name)
+            session.add(counterparty)
+            session.flush()
+            created_counterparty = True
+
+    # The entity (the specific company that signed)
+    entity = session.scalar(
+        select(CounterpartyEntity).where(
+            CounterpartyEntity.counterparty_id == counterparty.id,
+            func.lower(CounterpartyEntity.legal_name) == legal_name.lower(),
+        )
+    )
+    created_entity = False
+    if entity is None:
+        entity = CounterpartyEntity(counterparty_id=counterparty.id, legal_name=legal_name)
+        session.add(entity)
+        session.flush()
+        created_entity = True
+
+    contract = Contract(
+        counterparty_id=counterparty.id,
+        entity_id=entity.id,
+        contract_type=confirm.contract_type,
+        title=confirm.title.strip(),
+        effective_date=confirm.effective_date,
+        status="active",
+        file_path=str(stored),
+        file_hash=confirm.file_hash,
+        full_text=text,
+        uploaded_by=confirm.uploaded_by,
+    )
+    session.add(contract)
+
+    try:
+        session.commit()
+    except DBAPIError as error:
+        session.rollback()
+        raise IntakeError(f"Nonna couldn't save that contract: {str(error.orig).splitlines()[0]}") from error
+
+    return SavedContract(
+        contract_id=contract.id,
+        counterparty_id=counterparty.id,
+        counterparty_name=counterparty.name,
+        created_counterparty=created_counterparty,
+        created_entity=created_entity,
     )

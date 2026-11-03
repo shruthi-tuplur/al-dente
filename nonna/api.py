@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import chat, intake
+from nonna import chat, intake, extraction, reviews
 from nonna.database import get_session
 from nonna.models import (
     Clause,
@@ -263,38 +263,23 @@ def get_review_queue(
 
 @app.post(
     "/clauses/{clause_id}/reviews",
-    response_model=DecisionOut,
+    response_model=reviews.ReviewOutcome,
     status_code=status.HTTP_201_CREATED,
 )
-def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> DecisionOut:
-    """Record an attorney's decision about a clause and update its review status.
+def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> reviews.ReviewOutcome:
+    """Record an attorney's decision about a clause and keep the counterparty's baseline up to date.
 
-    Decisions are append-only. To change your mind, post a new decision.
+    Decisions are append-only. Approving a value that differs from the agreed baseline
+    returns 409 unless it's approved as an intentional change with a note.
     """
-    clause = session.get(Clause, clause_id)
-    if clause is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Clause not found.")
-
-    decision = ReviewDecision(
-        clause_id=clause.id,
-        action=review.action,
-        note=review.note,
-        reviewer=review.reviewer,
-    )
-    session.add(decision)
-    clause.review_status = STATUS_FOR_ACTION[review.action]
-
     try:
-        session.commit()
-    except DBAPIError as error:
-        # The database rejected it (one of its rules). Undo and explain.
-        session.rollback()
-        message = str(error.orig).splitlines()[0]
-        raise HTTPException(422, message) from error
-
-    session.refresh(decision)
-    return to_decision(decision)
-
+        return reviews.review_clause(session, clause_id, review)
+    except reviews.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except reviews.BaselineConflict as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except reviews.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -316,4 +301,26 @@ def contract_intake(file: UploadFile, session: SessionDep) -> intake.IntakePropo
     try:
         return intake.propose(session, file.filename or "upload", data)
     except intake.IntakeError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+
+
+@app.post("/contracts", response_model=intake.SavedContract, status_code=status.HTTP_201_CREATED)
+def save_contract(confirm: intake.IntakeConfirm, session: SessionDep) -> intake.SavedContract:
+    """Save an uploaded contract after the attorney confirms its details."""
+    try:
+        return intake.save(session, confirm)
+    except intake.IntakeError as error:
+        raise HTTPException(422, str(error)) from error
+
+
+
+
+@app.post("/contracts/{contract_id}/extract", response_model=extraction.ExtractionResult)
+def extract_contract(contract_id: int, session: SessionDep) -> extraction.ExtractionResult:
+    """Pull the key terms out of a saved contract. Everything is saved as pending review."""
+    try:
+        return extraction.extract_contract(session, contract_id)
+    except extraction.ExtractionError as error:
         raise HTTPException(422, str(error)) from error
