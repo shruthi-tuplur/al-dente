@@ -126,7 +126,7 @@
   min-height: 44px;
   border: 1px solid var(--espresso);
   border-radius: 22px;
-  padding: 4px 4px 4px 18px;
+  padding: 4px 4px 4px 6px;
   transition: box-shadow 0.15s ease;
 }
 .composer:focus-within {
@@ -197,5 +197,206 @@
 
   .composer {
     padding-left: 20px;
+  }
+}
+
+
+/* Upload button (left side of the message box) */
+.attach {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--espresso-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.attach:hover {
+  color: var(--espresso);
+}
+
+.attach:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+/* The user's "uploaded a file" bubble */
+.file-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Intake card: what nonna found in an uploaded contract */
+.intake-card {
+  margin-top: 12px;
+  width: 100%;
+  max-width: 560px;
+  background: #ffffff;
+  border: 1px solid #e6e0d8;
+  border-radius: 14px;
+  padding: 18px 20px;
+  font-size: 15px;
+}
+
+.intake-file {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.intake-headline {
+  margin: 0 0 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.intake-details {
+  margin: 0 0 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.intake-details > div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.intake-details dt {
+  color: var(--espresso-muted);
+  font-size: 13px;
+  padding-top: 2px;
+}
+
+.intake-details dd {
+  margin: 0;
+}
+
+.quote,
+.match {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.quote {
+  font-style: italic;
+}
+
+.match-new {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background: rgba(224, 176, 94, 0.25);
+  color: var(--espresso);
+}
+
+.intake-choose p,
+.intake-question {
+  margin: 0 0 8px;
+}
+
+.intake-warning {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--espresso);
+}
+
+.intake-error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--nonna-red);
+}
+
+.intake-confirmed {
+  margin: 4px 0 0;
+  color: var(--basil);
+  font-weight: 500;
+}
+
+.intake-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn {
+  border-radius: 9999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+.btn-primary {
+  background: var(--basil);
+  border: 1px solid var(--basil);
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: #434d2b;
+}
+
+.btn-quiet {
+  background: transparent;
+  border: 1px solid #d8d0c4;
+  color: var(--espresso);
+}
+
+.btn-quiet:hover {
+  border-color: var(--espresso);
+}
+
+/* Edit form inside the intake card */
+.intake-form {
+  display: grid;
+  gap: 12px;
+}
+
+.intake-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.intake-form input,
+.intake-form select {
+  font: inherit;
+  font-size: 15px;
+  color: var(--espresso);
+  padding: 8px 10px;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.intake-form input:focus,
+.intake-form select:focus {
+  outline: none;
+  border-color: var(--espresso);
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+@media (max-width: 640px) {
+  .intake-details > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }

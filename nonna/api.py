@@ -8,11 +8,11 @@ Then open http://127.0.0.1:8000/docs to try every endpoint in the browser.
 
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import chat
+from nonna import chat, intake
 from nonna.database import get_session
 from nonna.models import (
     Clause,
@@ -304,3 +304,16 @@ def chat_with_nonna(request: ChatRequest, session: SessionDep) -> ChatResponse:
         return chat.run_chat(session, request.messages)
     except chat.ChatUnavailable as error:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+
+
+
+
+
+@app.post("/contracts/intake", response_model=intake.IntakeProposal)
+def contract_intake(file: UploadFile, session: SessionDep) -> intake.IntakeProposal:
+    """Upload a contract. Nonna reads it and proposes its details. Nothing is saved to the database yet."""
+    data = file.file.read(intake.MAX_UPLOAD_BYTES + 1)
+    try:
+        return intake.propose(session, file.filename or "upload", data)
+    except intake.IntakeError as error:
+        raise HTTPException(422, str(error)) from error
