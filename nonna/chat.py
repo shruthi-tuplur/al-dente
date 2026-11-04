@@ -42,6 +42,9 @@ the review card.
 - Nonna tracks liability caps, indemnification, payment terms, and governing law. For any \
 other clause type, say Nonna doesn't track it yet. Drafting is not available yet either.
 - Do not give legal advice or opinions about whether a term is good. Report what was agreed.
+- When the user asks for the exact wording, language, or text of a clause, use \
+get_clause_text. The card shows the verbatim text, so never retype, quote, or paraphrase the \
+clause yourself. Just say which contract and section it's from and anything notable.
 - When the user asks for key details, an overview, or a profile of a counterparty, use \
 get_counterparty_profile. The app shows it as a card, so reply with one or two sentences and \
 mention anything that needs attention (like terms waiting for review).
@@ -126,6 +129,24 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["counterparty_id"],
         },
     },
+        {
+        "name": "get_clause_text",
+        "description": (
+            "Get the exact, verbatim text of a clause with a counterparty, with its source "
+            "contract and section. Leave out contract_id to get the currently agreed version(s), "
+            "or pass a contract_id (from get_contracts) to get that contract's version. The app "
+            "shows the verbatim text in a card."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "counterparty_id": {"type": "integer"},
+                "clause_type": {"type": "string", "enum": CLAUSE_TYPES},
+                "contract_id": {"type": "integer"},
+            },
+            "required": ["counterparty_id", "clause_type"],
+        },
+    },
     {
         "name": "get_review_queue",
         "description": (
@@ -146,6 +167,7 @@ STATUS_FOR_TOOL = {
     "get_clause_history": "Looked through the history",
     "get_review_queue": "Checked the review queue",
     "get_counterparty_profile": "Pulled the full profile",
+    "get_clause_text": "Pulled the exact wording",
 }
 
 CLAUSE_LABELS = {
@@ -211,6 +233,16 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
             "pending_review": len(lookups.get_review_queue(session, counterparty_id)),
         }
         _add_card(cards, Card(type="profile", title=detail.name, data=data))
+        return data
+    
+    if name == "get_clause_text":
+        clause_type = tool_input["clause_type"]
+        texts = lookups.get_clause_texts(
+            session, tool_input["counterparty_id"], clause_type, tool_input.get("contract_id")
+        )
+        data = [t.model_dump(mode="json") for t in texts]
+        if data:
+            _add_card(cards, Card(type="clause", title=f"{CLAUSE_LABELS[clause_type]} · exact wording", data=data))
         return data
 
     if name == "get_review_queue":

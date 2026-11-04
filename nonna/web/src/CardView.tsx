@@ -2,6 +2,7 @@
 // from the database through the API, never from the LLM's own words.
 import type { ReactNode } from 'react'
 import { useBulkReview } from './bulkReview'
+import ClauseBlock from './ClauseBlock'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import {
   CONTRACT_TYPE_LABELS,
@@ -24,6 +25,7 @@ interface ClauseData {
   clause_type: string
   section_number: string | null
   heading: string | null
+  full_text: string | null
   presence: string
   review_status: string
   terms: Term[]
@@ -209,6 +211,42 @@ function HistoryCard({ entries }: { entries: HistoryEntry[] }) {
   )
 }
 
+interface ClauseTextData {
+    source: Source
+    clause: ClauseData
+    is_agreed: boolean
+    applies_to: string[] | null
+  }
+  
+function ClauseCard({ items }: { items: ClauseTextData[] }) {
+    return (
+      <ul className="card-rows clause-list">
+        {items.map((item) => (
+          <li key={item.clause.id}>
+            <div className="card-row">
+              <span className="card-label">
+                {item.source.title}
+                {item.clause.section_number ? ` · §${item.clause.section_number}` : ''}
+              </span>
+              <span className={item.is_agreed ? 'badge badge-agreed' : 'badge'}>
+                {item.is_agreed ? 'Agreed' : item.clause.review_status === 'pending' ? 'Waiting for review' : item.clause.review_status}
+              </span>
+            </div>
+            <span className="quote">
+              {formatDate(item.source.effective_date)}
+              {item.applies_to ? ` · applies to ${item.applies_to.join(', ')}` : ''}
+            </span>
+            {item.clause.full_text ? (
+              <ClauseBlock text={item.clause.full_text} />
+            ) : (
+              <p className="card-empty">{clauseValue(item.clause)}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
 function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     const bulk = useBulkReview(items.map((item) => item.clause.id))
     if (items.length === 0) return <p className="card-empty">Nothing is waiting for review.</p>
@@ -238,12 +276,15 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
       </>
     )
   }
-  
+
 export default function CardView({ card }: { card: Card }) {
   let body: ReactNode = null
   switch (card.type) {
     case 'profile':
       body = <ProfileCard data={card.data as ProfileData} />
+      break
+    case 'clause':
+      body = <ClauseCard items={card.data as ClauseTextData[]} />
       break
     case 'positions':
       body = <TermRows positions={card.data as Position[]} />

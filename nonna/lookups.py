@@ -11,13 +11,20 @@ from sqlalchemy.orm import Session, selectinload
 from nonna.models import (
     Clause,
     Contract,
+    ContractSection,
     Counterparty,
     CounterpartyEntity,
     CounterpartyPosition,
     ReviewDecision,
 )
+from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import (
     ClauseOut,
+    ClauseText,
+    ContractText,
+    ContractWithClauses,
+    CounterpartyLibrary,
+    SectionOut,
     ContractOut,
     CounterpartyDetail,
     CounterpartySummary,
@@ -290,3 +297,121 @@ def record_review(session: Session, clause_id: int, review: ReviewIn) -> Decisio
 
     session.refresh(decision)
     return to_decision(decision)
+
+
+
+
+# ---------------------------------------------------------------------------
+# Verbatim clauses and the library view
+# ---------------------------------------------------------------------------
+
+def _agreed_clause_ids(session: Session, counterparty_id: int) -> set[int]:
+    return set(
+        session.scalars(
+            select(CounterpartyPosition.baseline_clause_id).where(
+                CounterpartyPosition.counterparty_id == counterparty_id,
+                CounterpartyPosition.superseded_at.is_(None),
+            )
+        )
+    )
+
+def _superseded_clause_ids(session: Session, counterparty_id: int) -> set[int]:
+    replaced = set(
+        session.scalars(
+            select(CounterpartyPosition.baseline_clause_id).where(
+                CounterpartyPosition.counterparty_id == counterparty_id,
+                CounterpartyPosition.superseded_at.is_not(None),
+            )
+        )
+    )
+    return replaced - _agreed_clause_ids(session, counterparty_id)
+
+def get_clause_texts(
+    session: Session, counterparty_id: int, clause_type: str, contract_id: int | None = None
+) -> list[ClauseText]:
+    """The exact text of a clause: from one contract, or the currently agreed version(s)."""
+    _require_counterparty(session, counterparty_id)
+
+    if contract_id is None:
+        return [
+            ClauseText(source=p.source, clause=p.clause, is_agreed=True, applies_to=p.applies_to)
+            for p in get_positions(session, counterparty_id, clause_type=clause_type)
+        ]
+
+    clause = session.scalars(
+        select(Clause)
+        .join(Clause.contract)
+        .where(
+            Clause.contract_id == contract_id,
+            Clause.clause_type == clause_type,
+            Contract.counterparty_id == counterparty_id,
+        )
+        .options(selectinload(Clause.terms), selectinload(Clause.contract))
+    ).one_or_none()
+    if clause is None:
+        return []
+    return [
+        ClauseText(
+            source=to_source(clause.contract),
+            clause=to_clause(clause),
+            is_agreed=clause.id in _agreed_clause_ids(session, counterparty_id),
+        )
+    ]
+
+
+def get_counterparty_library(session: Session, counterparty_id: int) -> CounterpartyLibrary:
+    """Every contract with a counterparty, each with all of its extracted clauses."""
+    detail = get_counterparty_detail(session, counterparty_id)
+    clauses = session.scalars(
+        select(Clause)
+        .join(Clause.contract)
+        .where(Contract.counterparty_id == counterparty_id)
+        .options(selectinload(Clause.terms))
+        .order_by(Clause.clause_type)
+    ).all()
+
+    by_contract: dict[int, list[ClauseOut]] = {}
+    for clause in clauses:
+        by_contract.setdefault(clause.contract_id, []).append(to_clause(clause))
+
+    return CounterpartyLibrary(
+        counterparty=detail,
+        contracts=[
+            ContractWithClauses(contract=c, clauses=by_contract.get(c.id, []))
+            for c in detail.contracts
+        ],
+        agreed_clause_ids=sorted(_agreed_clause_ids(session, counterparty_id)),
+        superseded_clause_ids=sorted(_superseded_clause_ids(session, counterparty_id)),
+        sections=[
+            SectionOut(
+                id=s.id, contract_id=s.contract_id, category=s.category,
+                section_number=s.section_number, heading=s.heading, full_text=s.full_text,
+            )
+            for s in session.scalars(
+                select(ContractSection)
+                .join(Contract, Contract.id == ContractSection.contract_id)
+                .where(Contract.counterparty_id == counterparty_id)
+                .order_by(Contract.effective_date, ContractSection.position)
+            )
+        ],
+        category_order=CATEGORY_ORDER,
+    )
+
+
+
+def get_contract_text(session: Session, contract_id: int) -> tuple[ContractText, str]:
+    """A contract's full text, plus where its original file is stored."""
+    contract = session.get(Contract, contract_id)
+    if contract is None:
+        raise NotFound(f"No contract with id {contract_id}.")
+    return (
+        ContractText(
+            id=contract.id,
+            title=contract.title,
+            contract_type=contract.contract_type,
+            effective_date=contract.effective_date,
+            full_text=contract.full_text,
+            has_file=bool(contract.file_path),
+        ),
+        contract.file_path,
+    )

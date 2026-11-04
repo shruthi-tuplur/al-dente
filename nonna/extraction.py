@@ -32,7 +32,7 @@ REDACTION = re.compile(r"\[\s*\*+\s*\]")
 
 # A section starts at the beginning of a line with a number like "11", "11.2", "§ 9", or "Section 4"
 SECTION_START = re.compile(
-    r"^[ \t]*(?:section\s+|§\s*)?(\d{1,2}(?:\.\d{1,2})*)\.?[ \t]+(?=[A-Z(\"“])(.*)$",
+    r"^[ \t]*(?:section\s+|§\s*)?(\d{1,2}(?:\.\d{1,2})*)\.?[ \t]+(?=(?-i:[A-Z(\"“]))(.*)$",
     re.IGNORECASE | re.MULTILINE,
 )
 

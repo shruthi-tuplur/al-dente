@@ -8,12 +8,16 @@ Then open http://127.0.0.1:8000/docs to try every endpoint in the browser.
 
 from typing import Annotated
 
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import chat, intake, extraction, reviews
+from nonna import chat, extraction, intake, lookups, reviews, sections
 from nonna.database import get_session
+from nonna.models import Contract
 from nonna.models import (
     Clause,
     Contract,
@@ -24,6 +28,7 @@ from nonna.models import (
 from nonna.schemas import (
     ClauseOut,
     ClauseType,
+    ContractText,
     ContractOut,
     CounterpartyDetail,
     CounterpartySummary,
@@ -37,6 +42,7 @@ from nonna.schemas import (
     TermOut,
     ChatRequest,
     ChatResponse,
+    CounterpartyLibrary,
 )
 
 app = FastAPI(
@@ -321,6 +327,55 @@ def save_contract(confirm: intake.IntakeConfirm, session: SessionDep) -> intake.
 def extract_contract(contract_id: int, session: SessionDep) -> extraction.ExtractionResult:
     """Pull the key terms out of a saved contract. Everything is saved as pending review."""
     try:
-        return extraction.extract_contract(session, contract_id)
+        result = extraction.extract_contract(session, contract_id)
     except extraction.ExtractionError as error:
         raise HTTPException(422, str(error)) from error
+
+    # Also file every section under a clause category for the library
+    contract = session.get(Contract, contract_id)
+    if contract is not None:
+        sections.index_contract(session, contract)
+    return result
+
+
+
+
+@app.get("/counterparties/{counterparty_id}/library", response_model=CounterpartyLibrary)
+def get_counterparty_library(counterparty_id: int, session: SessionDep) -> CounterpartyLibrary:
+    """Every contract with a counterparty, each with all of its extracted clauses."""
+    try:
+        return lookups.get_counterparty_library(session, counterparty_id)
+    except lookups.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+
+
+
+
+@app.get("/contracts/{contract_id}/text", response_model=ContractText)
+def get_contract_text(contract_id: int, session: SessionDep) -> ContractText:
+    """The full text of a contract."""
+    try:
+        text, _ = lookups.get_contract_text(session, contract_id)
+    except lookups.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    return text
+
+
+@app.get("/contracts/{contract_id}/file")
+def get_contract_file(contract_id: int, session: SessionDep) -> FileResponse:
+    """The original uploaded file, opened in the browser."""
+    try:
+        _, file_path = lookups.get_contract_text(session, contract_id)
+    except lookups.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+
+    # Only ever serve files from Nonna's own storage folder
+    storage = intake.STORAGE_DIR.resolve()
+    path = Path(file_path).resolve()
+    if storage not in path.parents or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "The original file isn't available.")
+
+    media_type = "application/pdf" if path.suffix.lower() == ".pdf" else (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    return FileResponse(path, media_type=media_type, content_disposition_type="inline")

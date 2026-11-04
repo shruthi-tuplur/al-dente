@@ -2,7 +2,7 @@
 
 export type Role = 'user' | 'nonna'
 
-export type CardType = 'profile' | 'positions' | 'history' | 'contracts' | 'review_queue'
+export type CardType = 'profile' | 'clause' | 'positions' | 'history' | 'contracts' | 'review_queue'
 
 export interface Card {
   type: CardType
@@ -226,4 +226,90 @@ export async function reviewClause(
   }
 
   return (await response.json()) as ReviewOutcome
+}
+
+
+// ---------------------------------------------------------------------------
+// Library view
+// ---------------------------------------------------------------------------
+
+export interface CounterpartySummary {
+  id: number
+  name: string
+  contract_count: number
+}
+
+export interface LibraryClause {
+  id: number
+  clause_type: string
+  section_number: string | null
+  heading: string | null
+  full_text: string | null
+  presence: string
+  extraction_method: string
+  review_status: string
+  terms: { term_key: string; value: string | boolean | null; unit: string | null }[]
+}
+
+export interface LibraryContract {
+  id: number
+  contract_type: ContractType
+  title: string
+  effective_date: string
+  expiration_date: string | null
+  status: string
+  signed_by_entity: string
+  parent_contract_id: number | null
+  amends_contract_id: number | null
+}
+
+export interface CounterpartyLibrary {
+  counterparty: {
+    id: number
+    name: string
+    entities: { id: number; legal_name: string; jurisdiction: string | null }[]
+    contracts: LibraryContract[]
+  }
+  contracts: { contract: LibraryContract; clauses: LibraryClause[] }[]
+  agreed_clause_ids: number[]
+  superseded_clause_ids: number[]
+  sections: LibrarySection[]
+  category_order: string[]
+}
+
+export interface LibrarySection {
+  id: number
+  contract_id: number
+  category: string
+  section_number: string | null
+  heading: string | null
+  full_text: string
+}
+
+export async function fetchCounterparties(): Promise<CounterpartySummary[]> {
+  const response = await fetch('/api/counterparties')
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load your vendors."))
+  return (await response.json()) as CounterpartySummary[]
+}
+
+export async function fetchLibrary(counterpartyId: number): Promise<CounterpartyLibrary> {
+  const response = await fetch(`/api/counterparties/${counterpartyId}/library`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load that vendor."))
+  return (await response.json()) as CounterpartyLibrary
+}
+
+
+export interface ContractText {
+  id: number
+  title: string
+  contract_type: ContractType
+  effective_date: string
+  full_text: string | null
+  has_file: boolean
+}
+
+export async function fetchContractText(contractId: number): Promise<ContractText> {
+  const response = await fetch(`/api/contracts/${contractId}/text`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load that contract."))
+  return (await response.json()) as ContractText
 }

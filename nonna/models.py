@@ -219,3 +219,24 @@ class CounterpartyPosition(Base):
     def __repr__(self) -> str:
         state = "current" if self.is_current else "superseded"
         return f"<CounterpartyPosition {self.clause_type} {self.contract_type_scope} ({state})>"
+
+
+
+
+class ContractSection(Base):
+    """One section of a contract, filed under a clause category. Verbatim, not reviewed."""
+
+    __tablename__ = "contract_sections"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    contract_id: Mapped[int] = mapped_column(ForeignKey("contracts.id"))
+    position: Mapped[int] = mapped_column(Integer)
+    category: Mapped[str] = mapped_column(Text)
+    section_number: Mapped[str | None] = mapped_column(Text)
+    heading: Mapped[str | None] = mapped_column(Text)
+    full_text: Mapped[str] = mapped_column(Text)
+    start_offset: Mapped[int | None] = mapped_column(Integer)
+    end_offset: Mapped[int | None] = mapped_column(Integer)
+
+    def __repr__(self) -> str:
+        return f"<ContractSection {self.category} §{self.section_number} in contract {self.contract_id}>"

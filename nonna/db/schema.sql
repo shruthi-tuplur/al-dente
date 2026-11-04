@@ -12,6 +12,8 @@ BEGIN;
 -- Hide "does not exist, skipping" notices on a fresh database
 SET LOCAL client_min_messages TO warning;
 
+DROP TABLE IF EXISTS contract_sections CASCADE;
+
 DROP TABLE IF EXISTS counterparty_positions CASCADE;
 DROP TABLE IF EXISTS review_decisions CASCADE;
 DROP TABLE IF EXISTS clause_terms CASCADE;
@@ -240,5 +242,26 @@ CREATE TRIGGER counterparty_positions_baseline_check
     BEFORE INSERT OR UPDATE OF baseline_clause_id, counterparty_id, clause_type
     ON counterparty_positions
     FOR EACH ROW EXECUTE FUNCTION check_position_baseline();
+
+-- ---------------------------------------------------------------------------
+-- contract_sections: every section of a contract, filed under a clause category
+-- Verbatim catalog for browsing. No extracted values and no review: the four
+-- tracked clause types live in clauses, clause_terms, and counterparty_positions.
+-- ---------------------------------------------------------------------------
+CREATE TABLE contract_sections (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    contract_id     BIGINT NOT NULL REFERENCES contracts (id) ON DELETE CASCADE,
+    position        INTEGER NOT NULL,
+    category        TEXT NOT NULL,
+    section_number  TEXT,
+    heading         TEXT,
+    full_text       TEXT NOT NULL,
+    start_offset    INTEGER,
+    end_offset      INTEGER,
+
+    UNIQUE (contract_id, position)
+);
+
+CREATE INDEX contract_sections_category_idx ON contract_sections (category);
 
 COMMIT;

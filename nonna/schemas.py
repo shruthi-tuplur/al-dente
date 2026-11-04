@@ -161,7 +161,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
-CardType = Literal["profile", "positions", "history", "contracts", "review_queue"]
+CardType = Literal["profile", "clause", "positions", "history", "contracts", "review_queue"]
 
 
 class Card(BaseModel):
@@ -176,3 +176,55 @@ class ChatResponse(BaseModel):
     reply: str
     status: str | None = None
     cards: list[Card]
+
+
+
+# ---------------------------------------------------------------------------
+# Verbatim clauses and the library view
+# ---------------------------------------------------------------------------
+
+class ClauseText(BaseModel):
+    """One clause's exact text, where it came from, and whether it's the agreed version."""
+
+    source: SourceContract
+    clause: ClauseOut
+    is_agreed: bool
+    applies_to: list[str] | None = None
+
+
+class ContractWithClauses(BaseModel):
+    contract: ContractOut
+    clauses: list[ClauseOut]
+
+
+class SectionOut(BaseModel):
+    """One section of a contract, filed under a clause category."""
+
+    id: int
+    contract_id: int
+    category: str
+    section_number: str | None
+    heading: str | None
+    full_text: str
+
+class CounterpartyLibrary(BaseModel):
+    """Everything Nonna knows about one counterparty, for the library view."""
+
+    counterparty: CounterpartyDetail
+    contracts: list[ContractWithClauses]
+    agreed_clause_ids: list[int]
+    superseded_clause_ids: list[int]  # used to be agreed, replaced by a later version
+    sections: list[SectionOut]  # every clause, as written
+    category_order: list[str]  # the order to show clause categories in
+
+
+class ContractText(BaseModel):
+    """The full text of one contract, for reading it in the library."""
+
+    id: int
+    title: str
+    contract_type: str
+    effective_date: date
+    full_text: str | None
+    has_file: bool
+   

@@ -67,3 +67,17 @@ export function describeTerms(clauseType: string, terms: Term[]): string | null 
       return null
   }
 }
+
+
+// Contract text pulled from a PDF has line breaks in the middle of sentences.
+// Join those back up, but keep a paragraph break before each numbered subsection.
+export function tidyClauseText(text: string): string {
+    return text
+      .replace(/\r/g, '')
+      .replace(/^.*\bPage \d+ of \d+.*$/gm, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n+(?=\(?\d{1,2}(?:\.\d{1,2})*\)?[.)]?\s)/g, '\n\n')
+      .replace(/([^\n])\n(?!\n)/g, '$1 ')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim()
+  }

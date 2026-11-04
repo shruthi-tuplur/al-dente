@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import CardView from './CardView'
 import IntakeCard from './IntakeCard'
+import Library from './Library'
 import RichText from './RichText'
 import { askNonna, uploadContract } from './nonnaApi'
 import type { Message } from './nonnaApi'
@@ -9,6 +10,7 @@ import './App.css'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
+  const [view, setView] = useState<'chat' | 'library'>('chat')
   const [draft, setDraft] = useState('')
   const [waiting, setWaiting] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -102,9 +104,29 @@ export default function App() {
     <div className="app">
       <header className="header">
         <h1 className="logo">nonna</h1>
+        <nav className="views" aria-label="Views">
+          <button
+            type="button"
+            className={view === 'chat' ? 'view-btn view-btn-active' : 'view-btn'}
+            aria-current={view === 'chat' ? 'page' : undefined}
+            onClick={() => setView('chat')}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            className={view === 'library' ? 'view-btn view-btn-active' : 'view-btn'}
+            aria-current={view === 'library' ? 'page' : undefined}
+            onClick={() => setView('library')}
+          >
+            Library
+          </button>
+        </nav>
       </header>
 
-      <main className="chat" aria-live="polite">
+      {view === 'library' && <Library />}
+
+      <main className="chat" aria-live="polite" hidden={view !== 'chat'}>
         <div className="thread">
           {messages.length === 0 && (
             <p className="empty">Pull up a chair. Ask nonna anything about your contracts.</p>
@@ -144,7 +166,7 @@ export default function App() {
         </div>
       </main>
 
-      <div className="composer-wrap">
+      <div className="composer-wrap" hidden={view !== 'chat'}>
         <form className="composer" onSubmit={handleSubmit}>
           <input
             ref={fileRef}
