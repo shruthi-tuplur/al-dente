@@ -25,6 +25,8 @@ from nonna.schemas import (
     ContractWithClauses,
     CounterpartyLibrary,
     SectionOut,
+    SectionText,
+    TopicOut,
     ContractOut,
     CounterpartyDetail,
     CounterpartySummary,
@@ -358,6 +360,53 @@ def get_clause_texts(
         )
     ]
 
+def _to_section(section: ContractSection) -> SectionOut:
+    return SectionOut(
+        id=section.id, contract_id=section.contract_id, category=section.category,
+        section_number=section.section_number, heading=section.heading, full_text=section.full_text,
+    )
+
+
+def list_topics(session: Session, counterparty_id: int) -> list[TopicOut]:
+    """Every clause topic in a counterparty's contracts, with how many contracts have it."""
+    _require_counterparty(session, counterparty_id)
+    rows = session.execute(
+        select(ContractSection.category, func.count(func.distinct(ContractSection.contract_id)))
+        .join(Contract, Contract.id == ContractSection.contract_id)
+        .where(Contract.counterparty_id == counterparty_id)
+        .group_by(ContractSection.category)
+    ).all()
+    rank = {c: i for i, c in enumerate(CATEGORY_ORDER)}
+    rows = sorted(rows, key=lambda r: (rank.get(r[0], len(rank)), r[0]))
+    return [TopicOut(category=category, contract_count=count) for category, count in rows]
+
+
+def get_section_texts(
+    session: Session,
+    counterparty_id: int,
+    category: str | None = None,
+    search: str | None = None,
+    contract_id: int | None = None,
+) -> list[SectionText]:
+    """The exact text of sections with a counterparty, by topic and/or a word or phrase, oldest first."""
+    _require_counterparty(session, counterparty_id)
+    query = (
+        select(ContractSection, Contract)
+        .join(Contract, Contract.id == ContractSection.contract_id)
+        .where(Contract.counterparty_id == counterparty_id)
+        .order_by(Contract.effective_date, ContractSection.position)
+    )
+    if category:
+        query = query.where(func.lower(ContractSection.category) == category.strip().lower())
+    if search:
+        pattern = f"%{search.strip()}%"
+        query = query.where(or_(ContractSection.heading.ilike(pattern), ContractSection.full_text.ilike(pattern)))
+    if contract_id is not None:
+        query = query.where(ContractSection.contract_id == contract_id)
+    return [
+        SectionText(source=to_source(contract), section=_to_section(section))
+        for section, contract in session.execute(query.limit(12)).all()
+    ]
 
 def get_counterparty_library(session: Session, counterparty_id: int) -> CounterpartyLibrary:
     """Every contract with a counterparty, each with all of its extracted clauses."""

@@ -247,6 +247,40 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
     )
   }
 
+  interface SectionTextData {
+    source: Source
+    section: {
+      id: number
+      category: string
+      section_number: string | null
+      heading: string | null
+      full_text: string
+    }
+  }
+  
+  function SectionCard({ items }: { items: SectionTextData[] }) {
+    return (
+      <ul className="card-rows clause-list">
+        {items.map((item) => (
+          <li key={item.section.id}>
+            <div className="card-row">
+              <span className="card-label">
+                {item.source.title}
+                {item.section.section_number ? ` · §${item.section.section_number}` : ''}
+              </span>
+              <span className="badge">As written</span>
+            </div>
+            <span className="quote">
+              {formatDate(item.source.effective_date)}
+              {item.section.heading ? ` · ${item.section.heading}` : ''}
+            </span>
+            <ClauseBlock text={item.section.full_text} />
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
 function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     const bulk = useBulkReview(items.map((item) => item.clause.id))
     if (items.length === 0) return <p className="card-empty">Nothing is waiting for review.</p>
@@ -286,6 +320,9 @@ export default function CardView({ card }: { card: Card }) {
     case 'clause':
       body = <ClauseCard items={card.data as ClauseTextData[]} />
       break
+    case 'section':
+        body = <SectionCard items={card.data as SectionTextData[]} />
+        break
     case 'positions':
       body = <TermRows positions={card.data as Position[]} />
       break

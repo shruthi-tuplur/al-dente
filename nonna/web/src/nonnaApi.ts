@@ -2,7 +2,7 @@
 
 export type Role = 'user' | 'nonna'
 
-export type CardType = 'profile' | 'clause' | 'positions' | 'history' | 'contracts' | 'review_queue'
+export type CardType = 'profile' | 'clause' | 'section' | 'positions' | 'history' | 'contracts' | 'review_queue'
 
 export interface Card {
   type: CardType

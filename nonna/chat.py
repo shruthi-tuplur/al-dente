@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from nonna import lookups
+from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import Card, ChatMessage, ChatResponse, ClauseType
 
 load_dotenv()
@@ -39,21 +40,29 @@ changed, when, and the decision note if there is one.
 mention them, and never treat them as agreed terms.
 - You cannot approve, reject, or change anything. If asked, say the attorney can do it from \
 the review card.
-- Nonna tracks liability caps, indemnification, payment terms, and governing law. For any \
-other clause type, say Nonna doesn't track it yet. Drafting is not available yet either.
+- Nonna tracks four key terms in depth: liability caps, indemnification, payment terms, and \
+governing law. Those have extracted values, attorney review, and agreed baselines.
+- Every other clause (confidentiality, termination, IP, insurance, force majeure, notices, and \
+so on) is filed by topic exactly as written. Use list_clause_topics to see what's on file and \
+get_section_text to pull the wording. These are not reviewed and have no agreed baseline, so \
+say "here's what the contract says", never "this is what was agreed". If several contracts \
+have the clause, mention which ones and their dates, and don't decide which one controls.
+- If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts. \
+Drafting is not available yet.
 - Do not give legal advice or opinions about whether a term is good. Report what was agreed.
-- When the user asks for the exact wording, language, or text of a clause, use \
-get_clause_text. The card shows the verbatim text, so never retype, quote, or paraphrase the \
-clause yourself. Just say which contract and section it's from and anything notable.
+- If a question is ambiguous (which counterparty, which contract), ask one short question.
+- When the user asks for the exact wording, language, or text of one of the four tracked \
+clauses, use get_clause_text. For any other clause, use get_section_text. Both show the \
+verbatim text in a card, so never retype or quote the clause yourself. Just say which \
+contract and section it's from and anything notable.
 - When the user asks for key details, an overview, or a profile of a counterparty, use \
 get_counterparty_profile. The app shows it as a card, so reply with one or two sentences and \
 mention anything that needs attention (like terms waiting for review).
 
 Style: warm, plain-spoken, and brief, like a trusted colleague who has worked with this team \
-for years. Lead with the direct answer in one sentence. Keep the whole reply under 80 words \
-unless the user asks for more detail. Mention only the most important source and any warning \
-(a pending review, a value mismatch). The app shows cards with the full details and every \
-source under your reply, so never list every clause or section in your text. You can use **bold** for key values and simple "- " bullet lists, but no headings or tables. Write amounts like $2,000,000."""
+for years. Two to four sentences is usually enough. The app shows detailed cards under your \
+reply, so you don't need to repeat every value. You can use **bold** for key values and simple "- " bullet lists, but no headings or tables. Write amounts \
+like $2,000,000."""
 
 TOOLS: list[dict[str, Any]] = [
     {
@@ -114,7 +123,7 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["counterparty_id", "clause_type"],
         },
     },
-        {
+    {
         "name": "get_counterparty_profile",
         "description": (
             "Get a full overview of a counterparty in one call: its signing entities, every "
@@ -129,7 +138,7 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["counterparty_id"],
         },
     },
-        {
+    {
         "name": "get_clause_text",
         "description": (
             "Get the exact, verbatim text of a clause with a counterparty, with its source "
@@ -148,6 +157,41 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "list_clause_topics",
+        "description": (
+            "List every clause topic on file in a counterparty's contracts (like Confidentiality, "
+            "Termination, Insurance), with how many contracts have each one. Use this to find "
+            "the right topic name before get_section_text."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"counterparty_id": {"type": "integer"}},
+            "required": ["counterparty_id"],
+        },
+    },
+    {
+        "name": "get_section_text",
+        "description": (
+            "Get the exact, verbatim text of any clause in a counterparty's contracts, filed by "
+            "topic. Pass a topic from list_clause_topics, a word or phrase to search for (like "
+            "'non-solicitation' or 'audit'), or both. Add contract_id to limit it to one "
+            "contract. Not reviewed by an attorney. The app shows the verbatim text in a card."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "counterparty_id": {"type": "integer"},
+                "topic": {
+                    "type": "string",
+                    "description": "A topic name, for example: " + ", ".join(CATEGORY_ORDER),
+                },
+                "search": {"type": "string", "description": "A word or phrase to look for."},
+                "contract_id": {"type": "integer"},
+            },
+            "required": ["counterparty_id"],
+        },
+    },
+    {
         "name": "get_review_queue",
         "description": (
             "Extracted clauses waiting for an attorney to review. Leave out counterparty_id "
@@ -162,12 +206,14 @@ TOOLS: list[dict[str, Any]] = [
 
 # Short status line shown under Nonna's reply, based on the last tool she used
 STATUS_FOR_TOOL = {
+    "get_clause_text": "Pulled the exact wording",
+    "get_section_text": "Pulled the exact wording",
+    "list_clause_topics": "Checked what's on file",
+    "get_counterparty_profile": "Pulled the full profile",
     "get_contracts": "Pulled the contract list",
     "get_current_positions": "Checked current terms",
     "get_clause_history": "Looked through the history",
     "get_review_queue": "Checked the review queue",
-    "get_counterparty_profile": "Pulled the full profile",
-    "get_clause_text": "Pulled the exact wording",
 }
 
 CLAUSE_LABELS = {
@@ -234,7 +280,7 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         }
         _add_card(cards, Card(type="profile", title=detail.name, data=data))
         return data
-    
+
     if name == "get_clause_text":
         clause_type = tool_input["clause_type"]
         texts = lookups.get_clause_texts(
@@ -243,6 +289,22 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         data = [t.model_dump(mode="json") for t in texts]
         if data:
             _add_card(cards, Card(type="clause", title=f"{CLAUSE_LABELS[clause_type]} · exact wording", data=data))
+        return data
+
+    if name == "list_clause_topics":
+        return [t.model_dump(mode="json") for t in lookups.list_topics(session, tool_input["counterparty_id"])]
+
+    if name == "get_section_text":
+        topic, search = tool_input.get("topic"), tool_input.get("search")
+        if not topic and not search:
+            raise ValueError("Pass a topic, a search phrase, or both.")
+        texts = lookups.get_section_texts(
+            session, tool_input["counterparty_id"], topic, search, tool_input.get("contract_id")
+        )
+        data = [t.model_dump(mode="json") for t in texts]
+        if data:
+            label = data[0]["section"]["category"] if topic else f"“{search}”"
+            _add_card(cards, Card(type="section", title=f"{label} · exact wording", data=data))
         return data
 
     if name == "get_review_queue":
@@ -304,8 +366,10 @@ def run_chat(session: Session, history: list[ChatMessage]) -> ChatResponse:
             status=status,
             cards=cards,
         )
-        # The profile card already shows the contracts and agreed terms, so don't repeat them
+
+    # The profile card already shows the contracts and agreed terms, so don't repeat them
     if any(card.type == "profile" for card in cards):
         cards = [c for c in cards if c.type not in ("contracts", "positions")]
+
     reply = "".join(block.text for block in response.content if block.type == "text").strip()
     return ChatResponse(reply=reply or "I'm not sure how to answer that.", status=status, cards=cards)

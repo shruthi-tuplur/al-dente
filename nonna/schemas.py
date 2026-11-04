@@ -161,7 +161,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
-CardType = Literal["profile", "clause", "positions", "history", "contracts", "review_queue"]
+CardType = Literal["profile", "clause", "section", "positions", "history", "contracts", "review_queue"]
 
 
 class Card(BaseModel):
@@ -206,6 +206,19 @@ class SectionOut(BaseModel):
     section_number: str | None
     heading: str | None
     full_text: str
+
+class SectionText(BaseModel):
+    """One section's exact text and the contract it came from. Not reviewed."""
+
+    source: SourceContract
+    section: SectionOut
+
+
+class TopicOut(BaseModel):
+    """A clause topic that shows up in a counterparty's contracts."""
+
+    category: str
+    contract_count: int
 
 class CounterpartyLibrary(BaseModel):
     """Everything Nonna knows about one counterparty, for the library view."""
