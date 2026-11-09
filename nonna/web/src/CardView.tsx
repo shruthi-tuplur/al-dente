@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { useBulkReview } from './bulkReview'
 import ClauseBlock from './ClauseBlock'
+import { canCorrect } from './CorrectionForm'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import {
   CONTRACT_TYPE_LABELS,
@@ -303,6 +304,11 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
                 clauseId={item.clause.id}
                 external={bulk.results[item.clause.id]}
                 onResolved={() => bulk.markResolved(item.clause.id)}
+                correct={
+                  canCorrect(item.clause.clause_type, item.clause.presence)
+                    ? { clauseType: item.clause.clause_type, terms: item.clause.terms }
+                    : undefined
+                }
               />
             </li>
           ))}

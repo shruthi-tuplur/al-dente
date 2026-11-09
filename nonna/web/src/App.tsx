@@ -3,14 +3,16 @@ import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import CardView from './CardView'
 import IntakeCard from './IntakeCard'
 import Library from './Library'
+import Review from './Review'
 import RichText from './RichText'
-import { askNonna, uploadContract } from './nonnaApi'
+import { askNonna, fetchReviewQueue, uploadContract } from './nonnaApi'
 import type { Message } from './nonnaApi'
 import './App.css'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
-  const [view, setView] = useState<'chat' | 'library'>('chat')
+  const [view, setView] = useState<'chat' | 'library' | 'review'>('chat')
+  const [pendingCount, setPendingCount] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [waiting, setWaiting] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -29,6 +31,18 @@ export default function App() {
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
   }, [draft])
+
+    // How many extracted terms are waiting for review, shown on the Review tab
+    function refreshPendingCount() {
+      fetchReviewQueue()
+        .then((queue) => setPendingCount(queue.length))
+        .catch(() => setPendingCount(null))
+    }
+  
+    // Check again whenever you switch views (an upload in chat adds new terms)
+    useEffect(() => {
+      refreshPendingCount()
+    }, [view])
 
   // Replace Nonna's "thinking" placeholder with her real reply
   function finish(pendingId: string, update: Partial<Message>) {
@@ -121,10 +135,20 @@ export default function App() {
           >
             Library
           </button>
+          <button
+            type="button"
+            className={view === 'review' ? 'view-btn view-btn-active' : 'view-btn'}
+            aria-current={view === 'review' ? 'page' : undefined}
+            onClick={() => setView('review')}
+          >
+            Review
+            {pendingCount ? <span className="view-count">{pendingCount}</span> : null}
+          </button>
         </nav>
       </header>
 
       {view === 'library' && <Library />}
+      {view === 'review' && <Review onDecided={refreshPendingCount} />}
 
       <main className="chat" aria-live="polite" hidden={view !== 'chat'}>
         <div className="thread">

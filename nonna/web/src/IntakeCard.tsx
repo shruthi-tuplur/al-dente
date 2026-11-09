@@ -411,6 +411,11 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
                           clauseId={clause.clause_id}
                           external={bulk.results[clause.clause_id]}
                           onResolved={() => bulk.markResolved(clause.clause_id!)}
+                          correct={
+                            clause.status === 'found' || clause.status === 'redacted'
+                              ? { clauseType: clause.clause_type, terms: clause.terms }
+                              : undefined
+                          }
                         />
                       )}
                     </li>

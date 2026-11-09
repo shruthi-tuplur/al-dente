@@ -190,30 +190,31 @@ JOIN clauses cl ON cl.contract_id = ct.id AND cl.clause_type = v.clause_type;
 -- ---------------------------------------------------------------------------
 -- Review decisions (append-only history)
 -- ---------------------------------------------------------------------------
-INSERT INTO review_decisions (clause_id, action, note, reviewer, created_at)
-SELECT cl.id, v.action, v.note, v.reviewer, v.created_at::timestamptz
+INSERT INTO review_decisions (clause_id, action, note, reviewer, created_at, changes)
+SELECT cl.id, v.action, v.note, v.reviewer, v.created_at::timestamptz, v.changes::jsonb
 FROM (VALUES
     ('sha256:castellan-2022-nda', 'governing_law', 'approved', NULL,
-     'j.romano', '2022-03-05 10:00-08'),
+     'j.romano', '2022-03-05 10:00-08', NULL),
     ('sha256:castellan-2023-msa', 'liability_cap', 'approved', NULL,
-     'j.romano', '2023-01-20 09:30-08'),
+     'j.romano', '2023-01-20 09:30-08', NULL),
     ('sha256:castellan-2023-msa', 'governing_law', 'approved', NULL,
-     'j.romano', '2023-01-20 09:31-08'),
+     'j.romano', '2023-01-20 09:31-08', NULL),
     ('sha256:castellan-2023-msa', 'payment_terms', 'approved', NULL,
-     'j.romano', '2023-01-20 09:32-08'),
+     'j.romano', '2023-01-20 09:32-08', NULL),
     ('sha256:castellan-2023-msa', 'indemnification', 'corrected',
      'LLM missed that the IP infringement indemnity is mutual. Corrected is_mutual and covers_ip_infringement.',
-     'j.romano', '2023-01-20 09:40-08'),
+     'j.romano', '2023-01-20 09:40-08',
+     '{"is_mutual": {"from": false, "to": true}, "covers_ip_infringement": {"from": false, "to": true}}'),
     ('sha256:castellan-2024-sow-1', 'payment_terms', 'approved_change',
      'Milestone billing at net 30 agreed for process development work to align with project funding.',
-     'a.ferraro', '2024-02-12 14:00-08'),
+     'a.ferraro', '2024-02-12 14:00-08', NULL),
     ('sha256:castellan-2024-amendment-1', 'liability_cap', 'approved_change',
      'Cap raised to $2M in exchange for expanded batch volumes. Approved by GC.',
-     'a.ferraro', '2024-06-03 11:15-07'),
+     'a.ferraro', '2024-06-03 11:15-07', NULL),
     ('sha256:halvorsen-2024-msa', 'liability_cap', 'approved',
      'Confirmed no cap in executed MSA. Flagged for renegotiation at renewal.',
-     'm.bianchi', '2024-09-04 16:20-07')
-) AS v (file_hash, clause_type, action, note, reviewer, created_at)
+     'm.bianchi', '2024-09-04 16:20-07', NULL)
+) AS v (file_hash, clause_type, action, note, reviewer, created_at, changes)
 JOIN contracts ct ON ct.file_hash = v.file_hash
 JOIN clauses cl ON cl.contract_id = ct.id AND cl.clause_type = v.clause_type;
 

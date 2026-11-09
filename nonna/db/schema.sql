@@ -156,12 +156,17 @@ CREATE TABLE review_decisions (
     clause_id   BIGINT NOT NULL REFERENCES clauses (id),
     action      TEXT NOT NULL
                 CHECK (action IN ('approved', 'rejected', 'corrected', 'approved_change')),
-    note        TEXT,
+        note        TEXT,
     reviewer    TEXT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- For corrections: what the attorney changed, like
+    -- {"cap_amount": {"from": "2500000", "to": "25000000"}}
+    changes     JSONB,
 
-    -- Intentional changes always need a reason
-    CHECK (action <> 'approved_change' OR (note IS NOT NULL AND btrim(note) <> ''))
+    -- Intentional changes and corrections always need a reason
+    CHECK (action NOT IN ('approved_change', 'corrected') OR (note IS NOT NULL AND btrim(note) <> '')),
+    -- A correction always records what it changed
+    CHECK (action <> 'corrected' OR changes IS NOT NULL)
 );
 
 CREATE INDEX review_decisions_clause_idx ON review_decisions (clause_id, created_at);

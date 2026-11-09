@@ -16,7 +16,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import BigInteger, Boolean, Date, ForeignKey, Integer, Numeric, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 TIMESTAMPTZ = TIMESTAMP(timezone=True)
@@ -184,6 +184,8 @@ class ReviewDecision(Base):
     note: Mapped[str | None] = mapped_column(Text)
     reviewer: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, server_default=func.now())
+    # For corrections: {"cap_amount": {"from": "2500000", "to": "25000000"}}
+    changes: Mapped[dict | None] = mapped_column(JSONB)
 
     clause: Mapped[Clause] = relationship(back_populates="decisions")
 

@@ -40,6 +40,15 @@ from nonna.schemas import (
     TermOut,
 )
 
+# Which contract types share a baseline (an NDA never sets the MSA's cap, for example)
+SCOPE_FOR_TYPE = {
+    "MSA": ["MSA", "amendment"],
+    "amendment": ["MSA", "amendment"],
+    "SOW": ["SOW"],
+    "change_order": ["SOW"],
+    "NDA": ["NDA"],
+}
+
 # What a review decision does to the clause's review status
 STATUS_FOR_ACTION = {
     "approved": "approved",
@@ -93,6 +102,7 @@ def to_decision(decision: ReviewDecision) -> DecisionOut:
         note=decision.note,
         reviewer=decision.reviewer,
         created_at=decision.created_at,
+        changes=decision.changes,
     )
 
 
@@ -261,15 +271,34 @@ def get_review_queue(session: Session, counterparty_id: int | None = None) -> li
     if counterparty_id is not None:
         query = query.where(Contract.counterparty_id == counterparty_id)
 
-    return [
-        ReviewQueueItem(
-            counterparty_id=c.contract.counterparty_id,
-            counterparty_name=c.contract.counterparty.name,
-            source=to_source(c.contract),
-            clause=to_clause(c),
+        positions: dict[int, list[PositionOut]] = {}  # per counterparty, so each is loaded once
+    items = []
+    for c in session.scalars(query):
+        counterparty_id = c.contract.counterparty_id
+        if counterparty_id not in positions:
+            positions[counterparty_id] = get_positions(session, counterparty_id)
+        scope = SCOPE_FOR_TYPE.get(c.contract.contract_type, [])
+        agreed = next(
+            (p for p in positions[counterparty_id] if p.clause_type == c.clause_type and p.applies_to == scope),
+            None,
         )
-        for c in session.scalars(query)
-    ]
+        clause = to_clause(c)
+        matches = None
+        if agreed is not None and clause.terms:
+            matches = {t.term_key: t.value for t in agreed.clause.terms} == {
+                t.term_key: t.value for t in clause.terms
+            }
+        items.append(
+            ReviewQueueItem(
+                counterparty_id=counterparty_id,
+                counterparty_name=c.contract.counterparty.name,
+                source=to_source(c.contract),
+                clause=clause,
+                agreed=agreed,
+                matches_agreed=matches,
+            )
+        )
+    return items
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { useBulkReview, ReviewResult } from './bulkReview'
+import CorrectionForm from './CorrectionForm'
+import type { Term } from './format'
 import { BaselineConflictError, reviewClause } from './nonnaApi'
 import type { ReviewAction } from './nonnaApi'
 
@@ -13,12 +15,14 @@ interface Props {
   clauseId: number
   external?: ReviewResult // a result from "Approve all"
   onResolved?: () => void // tells the parent this clause is decided
+  correct?: { clauseType: string; terms: Term[] } // shows "Fix value" when set
 }
 
 // Approve or reject one extracted clause. These buttons call the API directly,
 // so the LLM never approves anything.
-export default function ReviewControls({ clauseId, external, onResolved }: Props) {
+export default function ReviewControls({ clauseId, external, onResolved, correct }: Props) {
   const [state, setState] = useState<State>({ kind: 'idle' })
+  const [fixing, setFixing] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
 
@@ -67,6 +71,22 @@ export default function ReviewControls({ clauseId, external, onResolved }: Props
     )
   }
 
+  if (fixing && correct) {
+    return (
+      <CorrectionForm
+        clauseId={clauseId}
+        clauseType={correct.clauseType}
+        terms={correct.terms}
+        onSaved={(message) => {
+          setFixing(false)
+          setState({ kind: 'done', message, approved: true })
+          onResolved?.()
+        }}
+        onCancel={() => setFixing(false)}
+      />
+    )
+  }
+
   return (
     <div className="review-controls">
       {state.kind === 'conflict' && (
@@ -109,6 +129,19 @@ export default function ReviewControls({ clauseId, external, onResolved }: Props
         >
           Reject
         </button>
+        {correct && (
+          <button
+            type="button"
+            className="btn btn-sm btn-quiet"
+            disabled={state.kind === 'busy'}
+            onClick={() => {
+              setError('')
+              setFixing(true)
+            }}
+          >
+            Fix value
+          </button>
+        )}
       </div>
 
       {error && <p className="intake-error">{error}</p>}

@@ -39,6 +39,7 @@ class DecisionOut(BaseModel):
     note: str | None
     reviewer: str
     created_at: datetime
+    changes: dict[str, dict[str, Any]] | None = None
 
 
 class ClauseOut(BaseModel):
@@ -125,6 +126,8 @@ class ReviewQueueItem(BaseModel):
     counterparty_name: str
     source: SourceContract
     clause: ClauseOut
+    agreed: PositionOut | None = None  # the current agreed term this would be compared to
+    matches_agreed: bool | None = None  # None when there's nothing agreed yet to compare to
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +140,23 @@ class ReviewIn(BaseModel):
     action: ReviewAction
     reviewer: str = Field(min_length=1)
     note: str | None = None
+    # For "corrected": the fixed values, like {"cap_amount": "25000000"}
+    corrections: dict[str, Any] | None = None
+    # For "corrected": save it even though it differs from the agreed baseline
+    as_change: bool = False
 
     @model_validator(mode="after")
-    def note_required_for_intentional_changes(self) -> "ReviewIn":
-        if self.action == "approved_change" and not (self.note and self.note.strip()):
+    def check_note_and_corrections(self) -> "ReviewIn":
+        has_note = bool(self.note and self.note.strip())
+        if self.action == "approved_change" and not has_note:
             raise ValueError("A note is required when approving an intentional change.")
+        if self.action == "corrected":
+            if not self.corrections:
+                raise ValueError("Say what the correct value is.")
+            if not has_note:
+                raise ValueError("Add a short note explaining the correction.")
+        elif self.corrections:
+            raise ValueError("Corrections can only be sent with the corrected action.")
         return self
 
 

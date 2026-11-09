@@ -74,12 +74,20 @@ interface ChatResponse {
   status: string | null
   cards: Card[]
 }
+export type Corrections = Record<string, string | boolean>
 
 // Turn a failed response into a readable message
 async function errorDetail(response: Response, fallback: string): Promise<string> {
   try {
     const body = (await response.json()) as { detail?: unknown }
     if (typeof body.detail === 'string') return body.detail
+    // Validation errors come back as a list, like [{ msg: "Value error, Add a short note..." }]
+    if (Array.isArray(body.detail) && typeof body.detail[0]?.msg === 'string') {
+      const first = body.detail[0] as { msg: string; loc?: unknown[] }
+      const field = Array.isArray(first.loc) ? ` (${first.loc.join(' → ')})` : ''
+      return first.msg.replace(/^Value error, /, '') + field
+    }
+    if (body.detail !== undefined) return `${fallback} ${JSON.stringify(body.detail)}`
   } catch {
     // The response wasn't JSON, use the fallback
   }
@@ -211,11 +219,18 @@ export async function reviewClause(
   clauseId: number,
   action: ReviewAction,
   note?: string,
+  correction?: { values: Corrections; asChange?: boolean },
 ): Promise<ReviewOutcome> {
   const response = await fetch(`/api/clauses/${clauseId}/reviews`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, reviewer: CURRENT_USER, note: note ?? null }),
+    body: JSON.stringify({
+      action,
+      reviewer: CURRENT_USER,
+      note: note ?? null,
+      corrections: correction?.values ?? null,
+      as_change: correction?.asChange ?? false,
+    }),
   })
 
   if (response.status === 409) {
@@ -228,6 +243,32 @@ export async function reviewClause(
   return (await response.json()) as ReviewOutcome
 }
 
+// ---------------------------------------------------------------------------
+// Review dashboard
+// ---------------------------------------------------------------------------
+
+export interface QueueSource {
+  id: number
+  contract_type: string
+  title: string
+  effective_date: string
+}
+
+export interface QueueItem {
+  counterparty_id: number
+  counterparty_name: string
+  source: QueueSource
+  clause: LibraryClause
+  agreed: { applies_to: string[]; source: QueueSource; clause: LibraryClause } | null
+  matches_agreed: boolean | null
+}
+
+// Every extracted clause still waiting for an attorney, oldest upload first
+export async function fetchReviewQueue(): Promise<QueueItem[]> {
+  const response = await fetch('/api/review-queue')
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load the review queue."))
+  return (await response.json()) as QueueItem[]
+}
 
 // ---------------------------------------------------------------------------
 // Library view
