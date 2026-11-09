@@ -3,7 +3,7 @@
 Both the REST API (api.py) and Nonna's chat tools (chat.py) call these
 functions, so an answer in the chat always matches what the API returns.
 """
-
+from decimal import Decimal
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
@@ -38,6 +38,9 @@ from nonna.schemas import (
     ReviewQueueItem,
     SourceContract,
     TermOut,
+    VendorComparison,
+    VendorFilter,
+    VendorRow,
 )
 
 # Which contract types share a baseline (an NDA never sets the MSA's cap, for example)
@@ -300,7 +303,181 @@ def get_review_queue(session: Session, counterparty_id: int | None = None) -> li
         )
     return items
 
+# ---------------------------------------------------------------------------
+# Comparing one term across every vendor
+# ---------------------------------------------------------------------------
 
+# Which filters make sense for which clause type
+FILTERS_FOR_TYPE = {
+    "liability_cap": {"cap_below", "cap_at_least"},
+    "payment_terms": {"net_days_min", "net_days_max", "payment_structure"},
+    "governing_law": {"jurisdiction"},
+    "indemnification": {"is_mutual", "covers_ip_infringement"},
+}
+
+
+def _money(amount: Decimal) -> str:
+    return f"${amount:,.0f}"
+
+
+def describe_filters(clause_type: str, f: VendorFilter) -> str:
+    """The filters in plain English, so the card says exactly what was checked."""
+    parts = []
+    if f.cap_below is not None:
+        parts.append(f"cap below {_money(f.cap_below)}")
+    if f.cap_at_least is not None:
+        parts.append(f"cap of at least {_money(f.cap_at_least)}")
+    if f.net_days_min is not None and f.net_days_max is not None:
+        parts.append(
+            f"net {f.net_days_min}" if f.net_days_min == f.net_days_max
+            else f"net {f.net_days_min} to {f.net_days_max} days"
+        )
+    elif f.net_days_min is not None:
+        parts.append(f"net {f.net_days_min} days or longer")
+    elif f.net_days_max is not None:
+        parts.append(f"net {f.net_days_max} days or shorter")
+    if f.payment_structure:
+        parts.append(f"{f.payment_structure} billing")
+    if f.jurisdiction:
+        parts.append(f"{f.jurisdiction} law")
+    if f.is_mutual is not None:
+        parts.append("mutual" if f.is_mutual else "one-way")
+    if f.covers_ip_infringement is not None:
+        parts.append("covers IP infringement" if f.covers_ip_infringement else "doesn't cover IP infringement")
+    if f.applies_to:
+        parts.append(f"{f.applies_to}s only")
+    return ", ".join(parts) or "every vendor"
+
+
+def _matches(values: dict, unit: str | None, f: VendorFilter) -> bool | None:
+    """True or False for a match. None when a USD cap filter can't apply (another currency)."""
+    cap = values.get("cap_amount")
+    if f.cap_below is not None or f.cap_at_least is not None:
+        if cap is None:
+            return False
+        if (unit or "USD") != "USD":
+            return None
+        if f.cap_below is not None and not cap < f.cap_below:
+            return False
+        if f.cap_at_least is not None and not cap >= f.cap_at_least:
+            return False
+
+    days = values.get("net_days")
+    if f.net_days_min is not None and (days is None or days < f.net_days_min):
+        return False
+    if f.net_days_max is not None and (days is None or days > f.net_days_max):
+        return False
+    if f.payment_structure and values.get("payment_structure") != f.payment_structure:
+        return False
+
+    if f.jurisdiction:
+        law = str(values.get("jurisdiction") or "").lower()
+        wanted = f.jurisdiction.strip().lower()
+        if not law or (wanted not in law and law not in wanted):
+            return False
+
+    if f.is_mutual is not None and values.get("is_mutual") is not f.is_mutual:
+        return False
+    if f.covers_ip_infringement is not None and values.get("covers_ip_infringement") is not f.covers_ip_infringement:
+        return False
+    return True
+
+
+def compare_vendors(session: Session, clause_type: str, f: VendorFilter) -> VendorComparison:
+    """One agreed term across every vendor, filtered exactly in code."""
+    if clause_type not in FILTERS_FOR_TYPE:
+        raise ValueError(f"Nonna doesn't compare {clause_type} across vendors.")
+    used = {k for k, v in f.model_dump(exclude={"applies_to"}).items() if v is not None}
+    wrong = used - FILTERS_FOR_TYPE[clause_type]
+    if wrong:
+        raise ValueError(f"{', '.join(sorted(wrong))} can't be used with {clause_type}.")
+
+    scope = SCOPE_FOR_TYPE.get(f.applies_to) if f.applies_to else None
+    positions = session.scalars(
+        select(CounterpartyPosition)
+        .where(
+            CounterpartyPosition.clause_type == clause_type,
+            CounterpartyPosition.superseded_at.is_(None),
+        )
+        .options(
+            selectinload(CounterpartyPosition.counterparty),
+            selectinload(CounterpartyPosition.baseline_clause).selectinload(Clause.terms),
+            selectinload(CounterpartyPosition.baseline_clause).selectinload(Clause.contract),
+        )
+    ).all()
+    if scope is not None:
+        positions = [p for p in positions if p.contract_type_scope == scope]
+
+    matches: list[VendorRow] = []
+    not_comparable: set[str] = set()
+    other_agreed: set[int] = set()
+    with_position: set[int] = set()
+    for p in positions:
+        with_position.add(p.counterparty_id)
+        clause = p.baseline_clause
+        values = {t.term_key: t.value for t in clause.terms}
+        unit = next((t.unit for t in clause.terms if t.term_key == "cap_amount"), None)
+        result = _matches(values, unit, f)
+        if result is None:
+            not_comparable.add(p.counterparty.name)
+        elif result:
+            matches.append(
+                VendorRow(
+                    counterparty_id=p.counterparty_id,
+                    counterparty_name=p.counterparty.name,
+                    applies_to=p.contract_type_scope,
+                    source=to_source(clause.contract),
+                    clause=to_clause(clause),
+                )
+            )
+        else:
+            other_agreed.add(p.counterparty_id)
+    other_agreed -= {m.counterparty_id for m in matches}
+
+    # Vendors with nothing agreed: either confirmed absent by an attorney, or simply no record
+    # NDAs normally have no cap or payment terms, so they only count when asked about directly
+    contract_types = scope or ["MSA", "amendment", "SOW", "change_order"]
+    absent_conditions = [
+        Clause.clause_type == clause_type,
+        Clause.presence == "absent",
+        Clause.review_status.in_(("approved", "corrected")),
+        Contract.contract_type.in_(contract_types),
+    ]
+    if with_position:
+        absent_conditions.append(Counterparty.id.notin_(sorted(with_position)))
+    confirmed_absent = set(session.scalars(
+        select(Counterparty.name)
+        .join(Contract, Contract.counterparty_id == Counterparty.id)
+        .join(Clause, Clause.contract_id == Contract.id)
+        .where(*absent_conditions)
+    ))
+    everyone = session.execute(select(Counterparty.id, Counterparty.name)).all()
+    no_record = sorted(
+        name for cid, name in everyone if cid not in with_position and name not in confirmed_absent
+    )
+    pending = sorted(set(session.scalars(
+        select(Counterparty.name)
+        .join(Contract, Contract.counterparty_id == Counterparty.id)
+        .join(Clause, Clause.contract_id == Contract.id)
+        .where(
+            Clause.clause_type == clause_type,
+            Clause.review_status == "pending",
+            Clause.presence == "present",
+            Contract.contract_type.in_(contract_types),
+        )
+    )))
+
+    matches.sort(key=lambda r: (r.counterparty_name, r.applies_to))
+    return VendorComparison(
+        clause_type=clause_type,
+        filters=describe_filters(clause_type, f),
+        matches=matches,
+        other_agreed=len(other_agreed),
+        not_comparable=sorted(not_comparable),
+        confirmed_absent=sorted(confirmed_absent),
+        no_record=no_record,
+        pending=pending,
+    )
 # ---------------------------------------------------------------------------
 # Writing
 # ---------------------------------------------------------------------------

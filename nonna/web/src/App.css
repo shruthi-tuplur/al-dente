@@ -1166,3 +1166,38 @@
     border-right: none;
   }
 }
+
+/* Comparing one term across vendors */
+.vendor-scope {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: #f3efe8;
+  color: var(--espresso-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.vendor-notes {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid #f3efe8;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.vendor-note-label {
+  color: var(--espresso);
+  font-weight: 500;
+}
+
+/* Sub-bullets in Nonna's replies */
+.nonna-text li > ul {
+  margin: 4px 0 6px;
+  padding-left: 20px;
+  list-style-type: circle;
+}

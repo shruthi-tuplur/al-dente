@@ -129,7 +129,44 @@ class ReviewQueueItem(BaseModel):
     agreed: PositionOut | None = None  # the current agreed term this would be compared to
     matches_agreed: bool | None = None  # None when there's nothing agreed yet to compare to
 
+# ---------------------------------------------------------------------------
+# Comparing one term across every vendor
+# ---------------------------------------------------------------------------
 
+class VendorFilter(BaseModel):
+    """Optional filters for comparing a term across vendors. Leave everything out to list them all."""
+
+    cap_below: Decimal | None = None  # caps strictly under this amount (USD)
+    cap_at_least: Decimal | None = None  # caps at or above this amount (USD)
+    net_days_min: int | None = None
+    net_days_max: int | None = None
+    payment_structure: Literal["invoice", "milestone"] | None = None
+    jurisdiction: str | None = None
+    is_mutual: bool | None = None
+    covers_ip_infringement: bool | None = None
+    applies_to: Literal["MSA", "SOW", "NDA"] | None = None  # which kind of agreement
+
+
+class VendorRow(BaseModel):
+    counterparty_id: int
+    counterparty_name: str
+    applies_to: list[str]
+    source: SourceContract
+    clause: ClauseOut
+
+
+class VendorComparison(BaseModel):
+    """One agreed term across every vendor. Filtering is done in code, never by the model."""
+
+    clause_type: str
+    filters: str  # the filters in plain English, like "cap below $1,000,000"
+    matches: list[VendorRow]
+    other_agreed: int  # vendors with an agreed term that didn't match the filters
+    not_comparable: list[str]  # vendors whose cap is in another currency, so a USD filter can't apply
+    confirmed_absent: list[str]  # an attorney confirmed the contract has no such clause
+    no_record: list[str]  # nothing agreed on file for this term
+    pending: list[str]  # vendors with this term waiting for review
+    
 # ---------------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------------
@@ -176,7 +213,9 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
-CardType = Literal["profile", "clause", "section", "positions", "history", "contracts", "review_queue"]
+CardType = Literal[
+    "profile", "clause", "section", "positions", "history", "contracts", "review_queue", "vendors"
+]
 
 
 class Card(BaseModel):

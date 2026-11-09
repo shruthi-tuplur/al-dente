@@ -282,6 +282,75 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
     )
   }
 
+  interface VendorComparison {
+    clause_type: string
+    filters: string
+    matches: { counterparty_id: number; counterparty_name: string; applies_to: string[]; source: Source; clause: ClauseData }[]
+    other_agreed: number
+    not_comparable: string[]
+    confirmed_absent: string[]
+    no_record: string[]
+    pending: string[]
+  }
+  
+  const ABSENT_LABEL: Record<string, string> = {
+    liability_cap: 'No cap in the contract',
+    payment_terms: 'No payment terms in the contract',
+    governing_law: 'No governing law clause',
+    indemnification: 'No indemnification clause',
+  }
+  
+  // One agreed term across every vendor. The filtering happened in code, not in the model.
+  function VendorsCard({ data }: { data: VendorComparison }) {
+    const notes: { label: string; names: string[] }[] = [
+      { label: ABSENT_LABEL[data.clause_type] ?? 'Not in the contract', names: data.confirmed_absent },
+      { label: 'Cap in another currency, not compared', names: data.not_comparable },
+      { label: 'Waiting for review', names: data.pending },
+      { label: 'Nothing agreed on file', names: data.no_record },
+    ].filter((n) => n.names.length > 0)
+  
+    return (
+      <>
+        <p className="card-subtitle">
+          {data.filters === 'every vendor' ? 'Every vendor' : `Filter: ${data.filters}`} ·{' '}
+          {data.matches.length} {data.matches.length === 1 ? 'match' : 'matches'}
+          {data.other_agreed ? ` · ${data.other_agreed} other ${data.other_agreed === 1 ? 'vendor' : 'vendors'} didn't match` : ''}
+        </p>
+        {data.matches.length === 0 ? (
+          <p className="card-empty">No agreed terms match.</p>
+        ) : (
+          <ul className="card-rows">
+            {data.matches.map((row) => (
+              <li key={row.clause.id}>
+                <div className="card-row">
+                  <span className="card-label">
+                    {row.counterparty_name}
+                    <span className="vendor-scope">{row.applies_to[0]}</span>
+                  </span>
+                  <span className="card-value">{clauseValue(row.clause)}</span>
+                </div>
+                <span className="quote">
+                  {row.source.title}
+                  {row.clause.section_number ? ` · §${row.clause.section_number}` : ''} ·{' '}
+                  {formatDate(row.source.effective_date)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {notes.length > 0 && (
+          <ul className="vendor-notes">
+            {notes.map((n) => (
+              <li key={n.label}>
+                <span className="vendor-note-label">{n.label}:</span> {n.names.join(', ')}
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    )
+  }  
+
 function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     const bulk = useBulkReview(items.map((item) => item.clause.id))
     if (items.length === 0) return <p className="card-empty">Nothing is waiting for review.</p>
@@ -328,6 +397,9 @@ export default function CardView({ card }: { card: Card }) {
       break
     case 'section':
         body = <SectionCard items={card.data as SectionTextData[]} />
+        break
+    case 'vendors':
+        body = <VendorsCard data={card.data as VendorComparison} />
         break
     case 'positions':
       body = <TermRows positions={card.data as Position[]} />

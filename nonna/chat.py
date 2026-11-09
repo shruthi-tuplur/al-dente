@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from nonna import lookups
 from nonna.sections import CATEGORY_ORDER
-from nonna.schemas import Card, ChatMessage, ChatResponse, ClauseType
+from nonna.schemas import Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
 load_dotenv()
 
@@ -58,6 +58,12 @@ Drafting is not available yet.
 clauses, use get_clause_text. For any other clause, use get_section_text. Both show the \
 verbatim text in a card, so never retype or quote the clause yourself. Just say which \
 contract and section it's from and anything notable.
+- For questions across vendors ("which vendors have a cap under $1M?", "who's on Delaware \
+law?", "who has net 60?"), use compare_vendors. The tool does the filtering and the math, so \
+never compare or filter values yourself, and write amounts as plain numbers in the tool input \
+($1M is 1000000). Name the matching vendors and their sources. If the result lists vendors \
+with nothing on file, terms waiting for review, a confirmed missing clause, or a cap in another \
+currency, say so briefly, so the answer is never quietly incomplete.
 - When the user asks for key details, an overview, or a profile of a counterparty, use \
 get_counterparty_profile. The app shows it as a card, so reply with one or two sentences and \
 mention anything that needs attention (like terms waiting for review).
@@ -194,6 +200,37 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["counterparty_id"],
         },
     },
+        {
+        "name": "compare_vendors",
+        "description": (
+            "Compare one agreed term across every vendor, with optional filters. Only agreed "
+            "(attorney-reviewed) terms count as matches. The result also lists vendors with "
+            "nothing on file, vendors where an attorney confirmed the clause is missing (for "
+            "example no liability cap), vendors with that term still waiting for review, and "
+            "caps in another currency that a USD filter can't compare. Use only the filters that "
+            "fit the clause type. Leave all filters out to list every vendor's agreed term."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "clause_type": {"type": "string", "enum": CLAUSE_TYPES},
+                "cap_below": {"type": "number", "description": "Liability caps strictly under this USD amount."},
+                "cap_at_least": {"type": "number", "description": "Liability caps at or above this USD amount."},
+                "net_days_min": {"type": "integer", "description": "Payment terms of at least this many days."},
+                "net_days_max": {"type": "integer", "description": "Payment terms of at most this many days."},
+                "payment_structure": {"type": "string", "enum": ["invoice", "milestone"]},
+                "jurisdiction": {"type": "string", "description": "Governing law, like Delaware or New York."},
+                "is_mutual": {"type": "boolean", "description": "Indemnification goes both ways."},
+                "covers_ip_infringement": {"type": "boolean", "description": "Indemnification covers IP infringement."},
+                "applies_to": {
+                    "type": "string",
+                    "enum": ["MSA", "SOW", "NDA"],
+                    "description": "Only terms agreed for this kind of agreement.",
+                },
+            },
+            "required": ["clause_type"],
+        },
+    },
     {
         "name": "get_review_queue",
         "description": (
@@ -217,6 +254,7 @@ STATUS_FOR_TOOL = {
     "get_current_positions": "Checked current terms",
     "get_clause_history": "Looked through the history",
     "get_review_queue": "Checked the review queue",
+    "compare_vendors": "Compared every vendor",
 }
 
 CLAUSE_LABELS = {
@@ -308,6 +346,14 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         if data:
             label = data[0]["section"]["category"] if topic else f"“{search}”"
             _add_card(cards, Card(type="section", title=f"{label} · exact wording", data=data))
+        return data
+
+    if name == "compare_vendors":
+        clause_type = tool_input["clause_type"]
+        filters = VendorFilter(**{k: v for k, v in tool_input.items() if k != "clause_type"})
+        comparison = lookups.compare_vendors(session, clause_type, filters)
+        data = comparison.model_dump(mode="json")
+        _add_card(cards, Card(type="vendors", title=f"{CLAUSE_LABELS[clause_type]} across vendors", data=data))
         return data
 
     if name == "get_review_queue":
