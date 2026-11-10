@@ -12,7 +12,7 @@ Legal teams negotiate with the same companies over and over. But when someone as
 
 Most clause libraries store a company's **standard** positions. They don't store the history of what was **actually negotiated** with each counterparty. So terms quietly drift: a new SOW says net 60 when the MSA says net 45, a cap gets lowered, and nobody notices until it matters. Teams without API access to their CLM have even less visibility.
 
-I saw this firsthand working with an in-house contracts team at a biotech. Nonna is the tool I wished they had.
+I saw this firsthand while interning with an in-house contracts team at a pharmaceutical company. Nonna is the tool I wished they had.
 
 ## What Nonna does
 
