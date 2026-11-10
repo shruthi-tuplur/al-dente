@@ -1,71 +1,30 @@
-# Nonna
+# Nonna 👵🍝
 
-A counterparty clause library. Nonna remembers what a legal team agreed to with each counterparty, the way a nonna never forgets a recipe.
+**A counterparty clause library for in-house legal teams.** Nonna remembers what your team actually agreed to with every vendor, across every MSA, SOW, amendment, and change order, the way a nonna never forgets a recipe.
 
-<!-- Add a screenshot or GIF of the review screen here, e.g. ![Nonna review screen](docs/review.png) -->
+Part of [Al Dente](../README.md), a library of legal AI tools built to be clean, secure, and trustworthy enough for a whole legal team.
 
-## Problem
+---
 
-Legal teams negotiate with the same companies over and over, but there is often no easy way to see what was previously agreed with a specific counterparty. Most clause libraries store a company's standard positions, not the history of what was actually negotiated with each counterparty. Teams without CLM API access have even less visibility.
+## The problem
+
+Legal teams negotiate with the same companies over and over. But when someone asks "what did we agree to with this vendor last time?", the answer is usually buried across a stack of PDFs: an MSA, three SOWs, an amendment that changed one section, and a change order nobody remembers.
+
+Most clause libraries store a company's **standard** positions. They don't store the history of what was **actually negotiated** with each counterparty. So terms quietly drift: a new SOW says net 60 when the MSA says net 45, a cap gets lowered, and nobody notices until it matters. Teams without API access to their CLM have even less visibility.
+
+I saw this firsthand working with an in-house contracts team at a biotech. Nonna is the tool I wished they had.
+
+## What Nonna does
+
+- **Upload a contract** (PDF or Word). Nonna reads it, proposes the parties, contract type, effective date, and which MSA it falls under, and an attorney confirms before anything is saved.
+- **Extracts key terms** (liability cap, payment terms, governing law, indemnification) and saves them as *pending* until an attorney reviews them.
+- **Review dashboard** with every pending term grouped by vendor and contract, shown next to what's currently agreed, with a **Matches** or **Different** badge so drift is visible before anyone clicks Approve.
+- **Drift guard.** Approving a term that differs from the agreed baseline is blocked unless the attorney approves it as an intentional change with a note.
+- **Corrections.** Attorneys can fix values Nonna extracted wrong. The original value is kept in the decision log, and changing an agreed term still requires explicit confirmation.
+- **Chat.** Ask in plain English: "what's our liability cap with Lucca and has it changed?", "what was the exact indemnity clause we used?", "which vendors have a cap under $1M?" Answers come with cards showing the data and its source.
+- **Library.** Browse every vendor, every contract (grouped by type, with the full text and the original file), and every clause:
+  - **Key terms Nonna tracks:** the four terms with values, review status, and version history (Agreed vs Earlier version)
+  - **Every clause, as written:** every section of every contract, filed under about 20 topics (Confidentiality, IP, Termination, Force majeure, and so on), verbatim with a Copy button
+- **Questions across all vendors.** Compare one agreed term across the whole vendor list, with filters. The math happens in code, never in the model.
 
 ## How it works
-
-1. Upload an executed contract (PDF or DOCX, manual upload, no CLM integration required).
-2. Nonna identifies the parties, contract type, and effective date, matches the counterparty to an existing relationship (or proposes a new one), and suggests a parent contract (for example, a SOW under its MSA). The attorney confirms before anything is saved.
-3. Key terms are extracted: deterministic code for exact values, Claude only for indemnification language.
-4. Every extracted clause is saved as **pending**. An attorney approves, corrects, or rejects it next to the source text before it counts.
-5. Approved terms become part of the counterparty's history: counterparty → contract → clause → version, with a log of who decided what and why.
-6. Attorneys ask questions in plain English ("What's our liability cap with Aurelia?") and Nonna answers from the database.
-
-## Features
-
-- **Ask Nonna:** a chat that answers questions using tool calling. The model calls predefined lookup functions on the database. It never writes free-form SQL and never answers numbers from memory.
-- **Contract intake:** upload, party and date detection, counterparty matching, and parent contract suggestions, all confirmed by a person.
-- **Review queue:** approve, correct, or reject extracted clauses next to the source text, one at a time or in bulk.
-- **Counterparty library:** current agreed positions per clause type, full clause history, and the source contract behind every value.
-- **Full contract view:** open the original document behind any clause.
-
-## Design choices
-
-- Deterministic extraction for exact values (dollar amounts, dates, governing law).
-- LLM extraction for messier clause language (indemnification), always reviewed by a human.
-- A clause that can't be found is never recorded as absent, because a missing clause is something a person should check.
-- The chat can only read data through predefined functions, so answers are traceable to source contracts.
-- Stores both full clause text and structured key terms, linked together for an audit trail.
-- Postgres database (with constraints that only let approved or corrected clauses become a counterparty position) designed so [Too Many Cooks](../too_many_cooks/) can compare new contracts against it.
-
-## MVP scope
-
-- Clause types: liability cap, governing law, payment terms, indemnification
-- Upload, extract, store, view history, approve changes
-- Chat over the counterparty library
-
-## Run it locally
-
-From the repo root, after following [Getting started](../README.md#getting-started):
-
-```bash
-# Backend (FastAPI) on http://127.0.0.1:8000
-uv run uvicorn nonna.api:app --reload
-
-# Frontend (React + Vite) in a second terminal
-cd nonna/web
-npm install
-npm run dev
-```
-
-The frontend forwards `/api/...` calls to the backend, so open the URL Vite prints and you're in.
-
-See [architecture.md](architecture.md) for the database design and [user-flows.md](user-flows.md) for how attorneys use Nonna.
-
-## Results
-
-_Coming soon: extraction accuracy per clause type._
-
-## Limitations
-
-_Coming soon._
-
-## Later
-
-Drafting suggestions, more clause types (term and termination, IP ownership), counterparty summary export.
