@@ -28,6 +28,7 @@ I saw this firsthand while interning at an in-house contracts team at a pharmace
 - **Questions across all vendors.** Compare one agreed term across the whole vendor list, with filters. The math happens in code, never in the model.
 
 ## How it works
+Nonna is the app. Inside it, Claude (Anthropic's AI model) does three specific jobs: proposing contract details at intake, reading indemnification clauses, and answering chat questions with read-only tools. Everything else, including value extraction, the drift guard, and all comparisons, is plain code.
 
 ```
 Upload → Intake → Attorney confirms → Extraction → Pending review → Attorney decides → Agreed baseline
