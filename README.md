@@ -12,11 +12,11 @@ Al Dente takes real legal bottlenecks and "spaghetti" (messy ideas and messy cod
 
 | Tool | What it does | Status |
 |---|---|---|
-| [Nonna](nonna/) | Counterparty clause library. Remembers what a legal team agreed to with each counterparty, with version history and a log of approved changes. | In progress |
+| [Nonna](nonna/) | Counterparty clause library. Remembers what a legal team agreed to with each counterparty, with version history, attorney review, and a log of approved changes. | MVP built, evals in progress |
 | [Too Many Cooks](too_many_cooks/) | Contract drift detector. Flags when a new contract quietly drifts from what was previously negotiated with that counterparty. Builds on Nonna. | Planned |
 | [Despaghettify](despaghettify/) | Code audit tool. Reviews attorney-built scripts and explains, in plain English, how to make them secure and team-ready. | Planned |
 
-Nonna and Too Many Cooks share one extraction pipeline, which lives in [`extraction/`](extraction/).
+Nonna and Too Many Cooks share one extraction pipeline. It currently lives in [`nonna/extraction.py`](nonna/extraction.py) and will move into [`extraction/`](extraction/) when Too Many Cooks is built.
 
 ## Design principles
 
@@ -41,8 +41,8 @@ To simulate a negotiation history with a single counterparty, real public contra
 
 ```
 al-dente/
-├── extraction/        # Shared term extraction pipeline (deterministic + LLM)
-├── nonna/             # Counterparty clause library
+├── extraction/        # Future home of the shared extraction pipeline (see nonna/extraction.py)
+├── nonna/             # Counterparty clause library (FastAPI backend, React frontend, Postgres schema)
 ├── too_many_cooks/    # Contract drift detector
 ├── despaghettify/     # Code audit tool for attorney-built scripts
 ├── data/              # Base contracts, synthetic versions, answer keys
@@ -52,28 +52,34 @@ al-dente/
 
 ## Getting started
 
-Requires Python 3.11+.
+Requires Python 3.12+, [uv](https://docs.astral.sh/uv/), PostgreSQL, and Node.js.
 
 ```bash
-git clone https://github.com/<your-username>/al-dente.git
+git clone https://github.com/shruthi-tuplur/al-dente.git
 cd al-dente
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env             # then add your own API key to .env
-pytest
+uv sync                          # install Python dependencies
+cp .env.example .env             # then add your own API key and database URL
+
+createdb al_dente
+psql al_dente -f nonna/db/schema.sql
+psql al_dente -f nonna/db/seed.sql
+
+uv run pytest                    # run the test suite
 ```
 
-API keys are read from environment variables only and are never committed.
+To run Nonna locally, see [nonna/README.md](nonna/README.md#run-it-locally).
+
+API keys and database credentials are read from environment variables only and are never committed.
 
 ## Stack
 
-Python, FastAPI, React, SQLite (MVP), pytest, Claude API.
+Python, FastAPI, SQLAlchemy, PostgreSQL, React, TypeScript, Vite, pytest, Claude API.
 
 ## Roadmap
 
-- [ ] Shared extraction pipeline: liability cap, governing law, payment terms, indemnification
-- [ ] Nonna MVP: upload, extract, store, view history, approve changes for a single counterparty
+- [x] Shared extraction pipeline: liability cap, governing law, payment terms, indemnification
+- [x] Nonna MVP: upload, extract, store, view history, approve changes for a single counterparty
+- [x] Ask Nonna: chat that answers questions through predefined database lookups
 - [ ] Nonna evals: extraction accuracy per clause type
 - [ ] Too Many Cooks MVP: side-by-side drift report with approve and reject flow
 - [ ] Too Many Cooks evals: detection rate and false positives on planted drifts
