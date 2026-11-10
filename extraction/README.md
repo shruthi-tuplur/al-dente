@@ -2,6 +2,8 @@
 
 The shared term extraction pipeline used by [Nonna](../nonna/) and [Too Many Cooks](../too_many_cooks/).
 
+> The code currently lives in [`nonna/extraction.py`](../nonna/extraction.py). It will move here when Too Many Cooks is built and both tools need it.
+
 ## Clause types (MVP)
 
 | Clause | Method | Human review |
