@@ -1201,3 +1201,21 @@
   padding-left: 20px;
   list-style-type: circle;
 }
+
+/* Expirations and renewal deadlines */
+.deadline-action {
+  margin: 2px 0;
+  font-weight: 500;
+  color: var(--espresso);
+}
+
+.deadline-days {
+  font-weight: 400;
+  color: var(--espresso-muted);
+}
+
+.deadline-summary {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}

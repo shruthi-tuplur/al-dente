@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from nonna.lookups import SCOPE_FOR_TYPE, STATUS_FOR_ACTION, NotFound, ReviewRejected, to_decision
 from nonna.models import Clause, ClauseTerm, CounterpartyPosition, ReviewDecision
-from nonna.schemas import DecisionOut, ReviewIn
+from nonna.schemas import BASELINE_TYPES, DecisionOut, ReviewIn
 
 __all__ = ["BaselineConflict", "NotFound", "ReviewOutcome", "ReviewRejected", "review_clause"]
 
@@ -37,6 +37,7 @@ CLAUSE_LABELS = {
     "indemnification": "indemnification terms",
     "payment_terms": "payment terms",
     "governing_law": "governing law",
+    "term_renewal": "term and renewal",
 }
 
 # The values an attorney can correct for each clause type, and what kind of value each is
@@ -45,8 +46,18 @@ CORRECTABLE_TERMS: dict[str, dict[str, str]] = {
     "payment_terms": {"net_days": "days", "payment_structure": "structure"},
     "governing_law": {"jurisdiction": "text"},
     "indemnification": {"is_mutual": "yes_no", "covers_ip_infringement": "yes_no"},
+    "term_renewal": {
+        "initial_term_months": "months",
+        "end_date": "date",
+        "auto_renews": "yes_no",
+        "renewal_term_months": "months",
+        "notice_days": "notice",
+    },
 }
-DEFAULT_UNITS = {"cap_amount": "USD", "net_days": "days"}
+DEFAULT_UNITS = {
+    "cap_amount": "USD", "net_days": "days",
+    "initial_term_months": "months", "renewal_term_months": "months", "notice_days": "days",
+}
 PAYMENT_STRUCTURES = {"invoice", "milestone"}
 
 Values = dict[str, Any]
@@ -121,6 +132,27 @@ def _parse_corrections(clause_type: str, corrections: dict[str, Any]) -> Values:
             if not 0 <= days <= 365:
                 raise ReviewRejected("Payment days need to be between 0 and 365.")
             parsed[key] = Decimal(days)
+        elif kind == "months":
+            try:
+                months = int(str(raw).strip())
+            except ValueError:
+                raise ReviewRejected("Term lengths need to be a whole number of months, like 36.") from None
+            if not 1 <= months <= 600:
+                raise ReviewRejected("Term lengths need to be between 1 and 600 months.")
+            parsed[key] = Decimal(months)
+        elif kind == "notice":
+            try:
+                days = int(str(raw).strip())
+            except ValueError:
+                raise ReviewRejected("The notice period needs to be a whole number of days, like 90.") from None
+            if not 0 <= days <= 730:
+                raise ReviewRejected("The notice period needs to be between 0 and 730 days.")
+            parsed[key] = Decimal(days)
+        elif kind == "date":
+            try:
+                parsed[key] = date.fromisoformat(str(raw).strip())
+            except ValueError:
+                raise ReviewRejected("The end date needs to be a date, like 2027-12-31.") from None
         elif kind == "structure":
             if raw not in PAYMENT_STRUCTURES:
                 raise ReviewRejected("Payment structure must be invoice or milestone.")
@@ -149,6 +181,8 @@ def _apply_corrections(session: Session, clause: Clause, new_values: Values) -> 
         term = ClauseTerm(term_key=key, unit=units.get(key) or DEFAULT_UNITS.get(key))
         if isinstance(value, bool):
             term.value_bool = value
+        elif isinstance(value, date):
+            term.value_date = value
         elif isinstance(value, Decimal):
             term.value_numeric = value
         else:
@@ -194,7 +228,8 @@ def review_clause(session: Session, clause_id: int, review: ReviewIn) -> ReviewO
     # Approving (or correcting something nobody approved yet) can set the baseline.
     # Fixing a clause that was already approved just corrects the record.
     approving = review.action in ("approved", "approved_change") or (correcting and not already_reviewed)
-    sets_baseline = approving and bool(proposed)
+    # A contract's term belongs to that contract alone, so it never becomes a vendor-wide baseline
+    sets_baseline = approving and bool(proposed) and clause.clause_type in BASELINE_TYPES
 
     current = None
     if sets_baseline:

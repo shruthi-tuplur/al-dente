@@ -18,6 +18,10 @@ function Comparison({ item }: { item: QueueItem }) {
   if (item.clause.presence === 'incorporated_by_reference') {
     return <p className="quote">Uses the terms already agreed in the MSA.</p>
   }
+
+  if (item.clause.clause_type === 'term_renewal') {
+    return <p className="quote">Each contract has its own term, so this isn't compared to other contracts.</p>
+  }
   if (!item.agreed) {
     return <p className="quote">Nothing agreed yet for this. Approving it sets the baseline.</p>
   }

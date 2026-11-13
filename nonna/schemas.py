@@ -17,6 +17,13 @@ class ClauseType(str, Enum):
     indemnification = "indemnification"
     payment_terms = "payment_terms"
     governing_law = "governing_law"
+    term_renewal = "term_renewal"
+
+
+
+# Clause types that have one agreed baseline per vendor. A contract's term and renewal
+# dates belong to that contract alone, so they're tracked but never compared across contracts.
+BASELINE_TYPES = ["liability_cap", "indemnification", "payment_terms", "governing_law"]
 
 
 ReviewAction = Literal["approved", "rejected", "corrected", "approved_change"]
@@ -166,7 +173,38 @@ class VendorComparison(BaseModel):
     confirmed_absent: list[str]  # an attorney confirmed the contract has no such clause
     no_record: list[str]  # nothing agreed on file for this term
     pending: list[str]  # vendors with this term waiting for review
-    
+
+# ---------------------------------------------------------------------------
+# Expirations and renewal deadlines
+# ---------------------------------------------------------------------------
+
+DeadlineStatus = Literal["upcoming", "notice_passed", "expired", "ends_on_event", "unknown"]
+
+
+class DeadlineRow(BaseModel):
+    """One contract's term, worked out in code from its effective date and its reviewed term."""
+
+    counterparty_id: int
+    counterparty_name: str
+    source: SourceContract  # the contract whose term this is
+    term_source: SourceContract  # where the term came from (the contract itself, or an amendment)
+    clause_id: int
+    status: DeadlineStatus
+    term_end: date | None  # last day of the current term
+    notice_deadline: date | None  # last day to send notice of non-renewal
+    action_date: date | None  # the next date someone needs to act by
+    days_until: int | None  # days from today until action_date (negative means it's passed)
+    auto_renews: bool | None
+    summary: str  # plain English, written by code
+
+
+class Deadlines(BaseModel):
+    as_of: date
+    within_days: int | None
+    rows: list[DeadlineRow]
+    needs_review: list[str]  # contracts whose term is waiting for an attorney, so no dates yet
+    no_term_on_file: list[str]  # active master agreements and NDAs with no term on file
+
 # ---------------------------------------------------------------------------
 # Input
 # ---------------------------------------------------------------------------
@@ -213,8 +251,9 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
 
 
-CardType = Literal[
-    "profile", "clause", "section", "positions", "history", "contracts", "review_queue", "vendors"
+CardType = LiteralCardType = Literal[
+    "profile", "clause", "section", "positions", "history", "contracts", "review_queue", "vendors",
+    "deadlines",
 ]
 
 

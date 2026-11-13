@@ -99,7 +99,8 @@ CREATE TABLE clauses (
     contract_id        BIGINT NOT NULL REFERENCES contracts (id) ON DELETE CASCADE,
     clause_type        TEXT NOT NULL
                        CHECK (clause_type IN ('liability_cap', 'indemnification',
-                                              'payment_terms', 'governing_law')),
+                                              'payment_terms', 'governing_law',
+                                              'term_renewal')),
     section_number     TEXT,
     heading            TEXT,
     full_text          TEXT,

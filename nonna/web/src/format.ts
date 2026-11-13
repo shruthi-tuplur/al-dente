@@ -1,6 +1,6 @@
 // Shared helpers for showing contract data in a readable way
 
-export type ClauseType = 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification'
+export type ClauseType = 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification' | 'term_renewal'
 
 export interface Term {
   term_key: string
@@ -13,6 +13,7 @@ export const CLAUSE_LABELS: Record<ClauseType, string> = {
   payment_terms: 'Payment terms',
   governing_law: 'Governing law',
   indemnification: 'Indemnification',
+  term_renewal: 'Term and renewal',
 }
 
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -63,10 +64,34 @@ export function describeTerms(clauseType: string, terms: Term[]): string | null 
       const ip = term('covers_ip_infringement')?.value === true
       return `${mutual.value === true ? 'Mutual' : 'One-way'}${ip ? ', covers IP infringement' : ''}`
     }
-    default:
-      return null
+    case 'term_renewal': {
+        if (term('ends_on_event')?.value === true) return 'Ends when the work is done'
+        const months = term('initial_term_months')?.value
+        const end = term('end_date')?.value
+        const length = months != null ? describeMonths(Number(months)) : typeof end === 'string' ? `Ends ${formatDate(end)}` : null
+        if (!length) return null
+        if (term('auto_renews')?.value !== true) return length
+        const renewal = term('renewal_term_months')?.value
+        const notice = term('notice_days')?.value
+        const parts = [length, renewal != null ? `renews every ${describeMonths(Number(renewal))}` : 'renews automatically']
+        if (notice != null) parts.push(`${Number(notice)} days' notice`)
+        return parts.join(', ')
+      }
+      default:
+        return null
+    }
   }
-}
+  
+  // "36" -> "3 years", "18" -> "18 months"
+  export function describeMonths(months: number): string {
+    if (months % 12 === 0) {
+      const years = months / 12
+      return years === 1 ? '1 year' : `${years} years`
+    }
+    return months === 1 ? '1 month' : `${months} months`
+  }
+  
+
 
 
 // Contract text pulled from a PDF has line breaks in the middle of sentences.

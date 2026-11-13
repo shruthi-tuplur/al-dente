@@ -14,6 +14,7 @@ recorded as "absent", because a missing clause is something a person should chec
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -41,6 +42,9 @@ WORD_NUMBERS = {
     "forty five": 45, "sixty": 60, "seventy-five": 75, "ninety": 90,
 }
 
+
+# "three (3) years", "twelve (12) months", "(2) year" -> number and unit
+LENGTH = r"(?:[a-z-]+\s+)?\((\d+)\)\s+(year|month)s?"
 
 class ExtractionError(Exception):
     """The contract couldn't be extracted."""
@@ -72,7 +76,7 @@ class Found:
 
 class ExtractedTerm(BaseModel):
     term_key: str
-    value: Decimal | str | bool | None
+    value: Decimal | date | str | bool | None
     unit: str | None
 
 
@@ -97,11 +101,18 @@ class ExtractionResult(BaseModel):
 # Step 1: split the contract into sections
 # ---------------------------------------------------------------------------
 
+# Where the signature block starts. The last section ends here instead of running to the
+# end of the document and swallowing the signatures and footer.
+SIGNATURE_START = re.compile(r"\bIN WITNESS WHEREOF\b|^\s*\[Signature page follows\]", re.MULTILINE)
+
+
 def split_sections(text: str) -> list[Section]:
-    matches = list(SECTION_START.finditer(text))
+    signatures = SIGNATURE_START.search(text)
+    body_end = signatures.start() if signatures else len(text)
+    matches = [m for m in SECTION_START.finditer(text) if m.start() < body_end]
     sections = []
     for i, match in enumerate(matches):
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        end = matches[i + 1].start() if i + 1 < len(matches) else body_end
         first_line = match.group(2).strip()
         heading = re.split(r"(?<=[a-z\)])\.\s", first_line, maxsplit=1)[0][:120]
         sections.append(
@@ -200,6 +211,67 @@ def find_liability_cap(sections: list[Section]) -> Found | None:
     amount = Decimal(money.group(2).replace(",", ""))
     return Found("liability_cap", section, "deterministic", {"cap_amount": amount}, {"cap_amount": currency})
 
+def _months(number: str, unit: str) -> int:
+    return int(number) * (12 if unit.lower().startswith("year") else 1)
+
+
+def find_term_renewal(sections: list[Section]) -> Found | None:
+    """The contract's term: how long it lasts, whether it renews, and the notice needed to stop it."""
+    term_wording = (
+        r"initial term|term of this \w+ (?:is|shall|will)"
+        r"|shall (?:commence|begin|remain in (?:full )?(?:force|effect))"
+        r"|continues? (?:until|through|for)|expires? on"
+    )
+    section = _find(sections, ["term"], term_wording)
+    if section is None:
+        return None
+    flat = re.sub(r"\s+", " ", section.text)
+    terms: dict[str, Any] = {}
+    units: dict[str, str] = {}
+
+    length = re.search(
+        r"(?:(?:initial\s+)?term(?:\s+of\s+this\s+\w+)?\s+(?:is|of|shall\s+be|will\s+be)|for\s+a\s+period\s+of)\s+"
+        + LENGTH,
+        flat, re.IGNORECASE,
+    )
+    if length:
+        terms["initial_term_months"] = _months(length.group(1), length.group(2))
+        units["initial_term_months"] = "months"
+
+    end = re.search(
+        r"(?:until|through|expires? on|ending on)\s+([A-Z][a-z]+ \d{1,2}, \d{4})", flat
+    )
+    if end:
+        try:
+            terms["end_date"] = datetime.strptime(end.group(1), "%B %d, %Y").date()
+        except ValueError:
+            pass
+
+    if re.search(r"automatically renew|shall renew|will renew|auto-renew", flat, re.IGNORECASE):
+        terms["auto_renews"] = True
+        renewal = re.search(r"renew\w*\s+for\s+(?:successive\s+|additional\s+)?" + LENGTH, flat, re.IGNORECASE)
+        if renewal:
+            terms["renewal_term_months"] = _months(renewal.group(1), renewal.group(2))
+            units["renewal_term_months"] = "months"
+        notice = re.search(
+            r"non-?renewal[^.]{0,120}?(?:[a-z-]+\s+)?\((\d+)\)\s+days"
+            r"|(?:[a-z-]+\s+)?\((\d+)\)\s+days[^.]{0,80}?non-?renewal",
+            flat, re.IGNORECASE,
+        )
+        if notice:
+            terms["notice_days"] = int(notice.group(1) or notice.group(2))
+            units["notice_days"] = "days"
+    elif terms:
+        terms["auto_renews"] = False
+
+    # Some terms end on an event instead of a date, like "until acceptance of the final deliverable"
+    if not terms and re.search(r"continues? until|remain in effect until", flat, re.IGNORECASE):
+        return Found("term_renewal", section, "deterministic", {"ends_on_event": True},
+                     note="This ends on an event, not a date, so there's no deadline to track.")
+    if not terms:
+        return Found("term_renewal", section, "deterministic",
+                     note="Found the term section but no length or end date. Please check.")
+    return Found("term_renewal", section, "deterministic", terms, units)
 
 # ---------------------------------------------------------------------------
 # Step 4: Claude reads the indemnification section (and only that section)
@@ -283,6 +355,7 @@ FINDERS = {
     "payment_terms": find_payment_terms,
     "governing_law": find_governing_law,
     "indemnification": find_indemnification,
+    "term_renewal": find_term_renewal,
 }
 
 
@@ -290,6 +363,8 @@ def _term_row(clause_id: int, key: str, value: Any, unit: str | None) -> ClauseT
     row = ClauseTerm(clause_id=clause_id, term_key=key, unit=unit)
     if isinstance(value, bool):
         row.value_bool = value
+    elif isinstance(value, date):
+        row.value_date = value
     elif isinstance(value, (int, Decimal)):
         row.value_numeric = Decimal(value)
     else:
@@ -326,6 +401,14 @@ def extract_contract(session: Session, contract_id: int) -> ExtractionResult:
             ))
             continue
 
+        # A SOW without its own term just runs under its MSA, so there's nothing to track
+        if found is None and has_parent and clause_type == "term_renewal":
+            results.append(ExtractedClause(
+                clause_type=clause_type, status="not_found", clause_id=None, section_number=None,
+                heading=None, snippet=None, method=None, terms=[],
+                note="No term of its own. It runs under the master agreement.",
+            ))
+            continue
         # A SOW or change order that doesn't restate a clause follows its MSA
         if found is None and has_parent:
             clause = Clause(
@@ -389,3 +472,37 @@ def extract_contract(session: Session, contract_id: int) -> ExtractionResult:
 
     session.commit()
     return ExtractionResult(contract_id=contract.id, clauses=results)
+
+
+
+def add_term_renewal(session: Session, contract: Contract) -> bool:
+    """Pull just the term and renewal clause from a contract extracted before Nonna tracked it.
+
+    Saved as pending, like everything else. Returns True if a clause was added.
+    """
+    already = session.scalar(
+        select(Clause.id).where(Clause.contract_id == contract.id, Clause.clause_type == "term_renewal")
+    )
+    if already or not contract.full_text:
+        return False
+    found = find_term_renewal(split_sections(contract.full_text))
+    if found is None:
+        return False
+    clause = Clause(
+        contract_id=contract.id,
+        clause_type="term_renewal",
+        section_number=found.section.number,
+        heading=found.section.heading,
+        full_text=found.section.text,
+        start_offset=found.section.start,
+        end_offset=found.section.end,
+        presence="present",
+        extraction_method="deterministic",
+        review_status="pending",
+    )
+    session.add(clause)
+    session.flush()
+    for key, value in found.terms.items():
+        session.add(_term_row(clause.id, key, value, found.units.get(key)))
+    session.commit()
+    return True

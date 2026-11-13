@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import chat, extraction, intake, lookups, reviews, sections
+from nonna import chat, deadlines, extraction, intake, lookups, reviews, sections
 from nonna.database import get_session
 from nonna.models import Contract
 from nonna.models import (
@@ -43,6 +43,7 @@ from nonna.schemas import (
     ChatRequest,
     ChatResponse,
     CounterpartyLibrary,
+    Deadlines,
 )
 
 app = FastAPI(
@@ -379,3 +380,12 @@ def get_contract_file(contract_id: int, session: SessionDep) -> FileResponse:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
     return FileResponse(path, media_type=media_type, content_disposition_type="inline")
+
+
+
+@app.get("/deadlines", response_model=Deadlines)
+def get_deadlines(
+    session: SessionDep, within_days: int | None = None, counterparty_id: int | None = None
+) -> Deadlines:
+    """Expirations, renewals, and notice deadlines for active contracts, soonest first."""
+    return deadlines.get_deadlines(session, within_days, counterparty_id)

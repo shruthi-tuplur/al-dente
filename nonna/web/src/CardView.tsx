@@ -351,6 +351,105 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
     )
   }  
 
+  interface DeadlineRow {
+    counterparty_name: string
+    source: Source
+    term_source: Source
+    clause_id: number
+    status: 'upcoming' | 'notice_passed' | 'expired' | 'ends_on_event' | 'unknown'
+    term_end: string | null
+    notice_deadline: string | null
+    action_date: string | null
+    days_until: number | null
+    auto_renews: boolean | null
+    summary: string
+  }
+  
+  interface DeadlinesData {
+    as_of: string
+    within_days: number | null
+    rows: DeadlineRow[]
+    needs_review: string[]
+    no_term_on_file: string[]
+  }
+  
+  function daysLabel(days: number | null): string {
+    if (days === null) return ''
+    if (days === 0) return 'today'
+    if (days === 1) return 'tomorrow'
+    if (days > 0) return `in ${days} days`
+    return days === -1 ? 'yesterday' : `${-days} days ago`
+  }
+  
+  // What needs doing next for one contract, with a badge showing how urgent it is
+  function deadlineHeadline(row: DeadlineRow): { label: string; badge: string; badgeClass: string } {
+    const when = row.action_date ? formatDate(row.action_date) : ''
+    if (row.status === 'expired') return { label: `Expired ${when}`, badge: 'Expired', badgeClass: 'badge' }
+    if (row.status === 'unknown') return { label: 'Dates incomplete', badge: 'Check term', badgeClass: 'badge' }
+    const action = row.notice_deadline ? `Send notice by ${when}` : `Expires ${when}`
+    const days = row.days_until ?? Infinity
+    if (row.status === 'notice_passed') {
+      return { label: action, badge: 'Renewed, notice missed', badgeClass: 'badge badge-differs' }
+    }
+    if (days <= 30) return { label: action, badge: 'Act now', badgeClass: 'badge badge-differs' }
+    if (days <= 90) return { label: action, badge: 'Coming up', badgeClass: 'badge badge-pending' }
+    return { label: action, badge: 'Later', badgeClass: 'badge' }
+  }
+  
+  // Expirations and renewal deadlines. Every date was worked out in code, not by the model.
+  function DeadlinesCard({ data }: { data: DeadlinesData }) {
+    const notes = [
+      { label: 'Term waiting for review', names: data.needs_review },
+      { label: 'No term on file', names: data.no_term_on_file },
+    ].filter((n) => n.names.length > 0)
+  
+    return (
+      <>
+        <p className="card-subtitle">
+          As of {formatDate(data.as_of)} · Estimated from each contract's reviewed term, so confirm against the
+          contract before acting
+        </p>
+        {data.rows.length === 0 ? (
+          <p className="card-empty">
+            {data.within_days ? `Nothing due in the next ${data.within_days} days.` : 'No deadlines on file.'}
+          </p>
+        ) : (
+          <ul className="card-rows">
+            {data.rows.map((row) => {
+              const head = deadlineHeadline(row)
+              return (
+                <li key={row.clause_id + '-' + row.source.id}>
+                  <div className="card-row">
+                    <span className="card-label">{row.counterparty_name}</span>
+                    <span className={head.badgeClass}>{head.badge}</span>
+                  </div>
+                  <p className="deadline-action">
+                    {head.label}
+                    {row.days_until !== null && <span className="deadline-days"> · {daysLabel(row.days_until)}</span>}
+                  </p>
+                  <span className="quote">
+                    {row.source.title} · {formatDate(row.source.effective_date)}
+                    {row.term_source.id !== row.source.id ? ` · term from ${row.term_source.title}` : ''}
+                  </span>
+                  <p className="deadline-summary">{row.summary}</p>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {notes.length > 0 && (
+          <ul className="vendor-notes">
+            {notes.map((n) => (
+              <li key={n.label}>
+                <span className="vendor-note-label">{n.label}:</span> {n.names.join(', ')}
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    )
+  }
+
 function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     const bulk = useBulkReview(items.map((item) => item.clause.id))
     if (items.length === 0) return <p className="card-empty">Nothing is waiting for review.</p>
@@ -398,6 +497,9 @@ export default function CardView({ card }: { card: Card }) {
     case 'section':
         body = <SectionCard items={card.data as SectionTextData[]} />
         break
+    case 'deadlines':
+      body = <DeadlinesCard data={card.data as DeadlinesData} />
+      break
     case 'vendors':
         body = <VendorsCard data={card.data as VendorComparison} />
         break

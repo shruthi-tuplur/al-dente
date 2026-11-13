@@ -14,9 +14,9 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import lookups
+from nonna import deadlines, lookups
 from nonna.sections import CATEGORY_ORDER
-from nonna.schemas import Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
+from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
 load_dotenv()
 
@@ -45,6 +45,14 @@ can mention the original value and the attorney's note.
 the review card.
 - Nonna tracks four key terms in depth: liability caps, indemnification, payment terms, and \
 governing law. Those have extracted values, attorney review, and agreed baselines.
+- Nonna also tracks each contract's term and renewal (term_renewal): its length, whether it \
+renews automatically, and the notice needed to stop it. Each contract has its own term, so \
+there's no vendor-wide baseline for it.
+- For questions about expirations, renewals, or notice deadlines ("what's expiring soon?", \
+"when do I need to send notice to Lucca?"), use get_deadlines. Every date is worked out in \
+code, so never calculate or adjust a date yourself. Give the date to act by and the contract. \
+Mention any contracts whose term is still waiting for review or isn't on file. Remind the user \
+that the dates are estimates from the reviewed term and should be confirmed against the contract.
 - Every other clause (confidentiality, termination, IP, insurance, force majeure, notices, and \
 so on) is filed by topic exactly as written. Use list_clause_topics to see what's on file and \
 get_section_text to pull the wording. These are not reviewed and have no agreed baseline, so \
@@ -111,7 +119,7 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "counterparty_id": {"type": "integer"},
-                "clause_type": {"type": "string", "enum": CLAUSE_TYPES},
+                "clause_type": {"type": "string", "enum": BASELINE_TYPES},
             },
             "required": ["counterparty_id"],
         },
@@ -213,7 +221,7 @@ TOOLS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "clause_type": {"type": "string", "enum": CLAUSE_TYPES},
+                "clause_type": {"type": "string", "enum": BASELINE_TYPES},
                 "cap_below": {"type": "number", "description": "Liability caps strictly under this USD amount."},
                 "cap_at_least": {"type": "number", "description": "Liability caps at or above this USD amount."},
                 "net_days_min": {"type": "integer", "description": "Payment terms of at least this many days."},
@@ -229,6 +237,25 @@ TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["clause_type"],
+        },
+    },
+        {
+        "name": "get_deadlines",
+        "description": (
+            "Expirations, renewals, and notice deadlines for active contracts, soonest first. "
+            "Dates are worked out in code from each contract's effective date and its reviewed "
+            "term. Also lists contracts whose term is waiting for review or isn't on file. "
+            "Use within_days for 'coming up soon' questions, or counterparty_id for one vendor."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "within_days": {
+                    "type": "integer",
+                    "description": "Only deadlines in the next this many days (past ones are included).",
+                },
+                "counterparty_id": {"type": "integer"},
+            },
         },
     },
     {
@@ -255,6 +282,7 @@ STATUS_FOR_TOOL = {
     "get_clause_history": "Looked through the history",
     "get_review_queue": "Checked the review queue",
     "compare_vendors": "Compared every vendor",
+    "get_deadlines": "Checked the calendar",
 }
 
 CLAUSE_LABELS = {
@@ -262,6 +290,7 @@ CLAUSE_LABELS = {
     "indemnification": "Indemnification",
     "payment_terms": "Payment terms",
     "governing_law": "Governing law",
+    "term_renewal": "Term and renewal",
 }
 
 
@@ -354,6 +383,15 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         comparison = lookups.compare_vendors(session, clause_type, filters)
         data = comparison.model_dump(mode="json")
         _add_card(cards, Card(type="vendors", title=f"{CLAUSE_LABELS[clause_type]} across vendors", data=data))
+        return data
+    if name == "get_deadlines":
+        result = deadlines.get_deadlines(
+            session, tool_input.get("within_days"), tool_input.get("counterparty_id")
+        )
+        data = result.model_dump(mode="json")
+        within = tool_input.get("within_days")
+        title = f"Deadlines in the next {within} days" if within else "Expirations and renewals"
+        _add_card(cards, Card(type="deadlines", title=title, data=data))
         return data
 
     if name == "get_review_queue":

@@ -11,6 +11,7 @@ export type CardType =
   | 'contracts'
   | 'review_queue'
   | 'vendors'
+  | 'deadlines'
 
 export interface Card {
   type: CardType
@@ -182,7 +183,7 @@ export interface ExtractedTerm {
 }
 
 export interface ExtractedClause {
-  clause_type: 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification'
+  clause_type: 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification' | 'term_renewal'
   status: 'found' | 'redacted' | 'inherited' | 'unchanged' | 'not_found'
   clause_id: number | null
   section_number: string | null

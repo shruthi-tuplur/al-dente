@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useBulkReview } from './bulkReview'
+import { clauseLabel, describeTerms } from './format'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import { CURRENT_USER, extractContract, saveContract } from './nonnaApi'
 import type {
@@ -35,42 +36,6 @@ function formatDate(iso: string): string {
   })
 }
 
-const CLAUSE_LABELS: Record<ExtractedClause['clause_type'], string> = {
-  liability_cap: 'Liability cap',
-  payment_terms: 'Payment terms',
-  governing_law: 'Governing law',
-  indemnification: 'Indemnification',
-}
-
-// Turn extracted values into something readable, like "$2,500,000" or "Net 45"
-function describeTerms(clause: ExtractedClause): string | null {
-  const term = (key: string) => clause.terms.find((t) => t.term_key === key)
-  switch (clause.clause_type) {
-    case 'liability_cap': {
-      const cap = term('cap_amount')
-      if (!cap || cap.value === null) return null
-      return Number(cap.value).toLocaleString('en-US', {
-        style: 'currency',
-        currency: cap.unit || 'USD',
-        maximumFractionDigits: 0,
-      })
-    }
-    case 'payment_terms': {
-      const days = term('net_days')
-      if (!days || days.value === null) return null
-      const structure = term('payment_structure')?.value
-      return `Net ${Number(days.value)}${structure === 'milestone' ? ', milestone billing' : ''}`
-    }
-    case 'governing_law':
-      return (term('jurisdiction')?.value as string | undefined) ?? null
-    case 'indemnification': {
-      const mutual = term('is_mutual')
-      if (!mutual) return null
-      const ip = term('covers_ip_infringement')?.value === true
-      return `${mutual.value === true ? 'Mutual' : 'One-way'}${ip ? ', covers IP infringement' : ''}`
-    }
-  }
-}
 
 function withArticle(label: string): string {
   return /^[AEIOU]/.test(label) ? `an ${label}` : `a ${label}`
@@ -389,7 +354,7 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
                   return (
                     <li key={clause.clause_type}>
                       <div className="extracted-row">
-                        <span className="extracted-label">{CLAUSE_LABELS[clause.clause_type]}</span>
+                        <span className="extracted-label">{clauseLabel(clause.clause_type)}</span>
                         <span className="extracted-value">
                           {clause.status === 'found' && (value ?? 'Found, no value pulled')}
                           {clause.status === 'redacted' && 'Redacted'}

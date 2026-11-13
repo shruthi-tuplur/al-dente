@@ -5,7 +5,8 @@ import type { Term } from './format'
 
 // One field an attorney can fix, per clause type
 type Field =
-  | { key: string; label: string; kind: 'amount' | 'days' | 'text'; placeholder: string }
+  | { key: string; label: string; kind: 'amount' | 'days' | 'text' | 'months'; placeholder: string }
+  | { key: string; label: string; kind: 'date' }
   | { key: string; label: string; kind: 'choice'; options: { value: string; label: string }[] }
   | { key: string; label: string; kind: 'yes_no' }
 
@@ -28,7 +29,18 @@ const FIELDS: Record<string, Field[]> = {
     { key: 'is_mutual', label: 'Mutual (both sides indemnify)', kind: 'yes_no' },
     { key: 'covers_ip_infringement', label: 'Covers IP infringement', kind: 'yes_no' },
   ],
+  term_renewal: [
+    { key: 'initial_term_months', label: 'Initial term (months)', kind: 'months', placeholder: '36' },
+    { key: 'end_date', label: 'Or a fixed end date', kind: 'date' },
+    { key: 'auto_renews', label: 'Renews automatically', kind: 'yes_no' },
+    { key: 'renewal_term_months', label: 'Renewal period (months)', kind: 'months', placeholder: '12' },
+    { key: 'notice_days', label: 'Notice to stop renewal (days)', kind: 'days', placeholder: '90' },
+  ],
 }
+
+
+// Optional fields can be left blank (a term with no renewal has no renewal period)
+const OPTIONAL = new Set(['initial_term_months', 'end_date', 'renewal_term_months', 'notice_days'])
 
 export function canCorrect(clauseType: string, presence: string): boolean {
   return clauseType in FIELDS && presence === 'present'
@@ -39,6 +51,7 @@ function startingValues(fields: Field[], terms: Term[]): Corrections {
   for (const field of fields) {
     const term = terms.find((t) => t.term_key === field.key)
     if (field.kind === 'yes_no') values[field.key] = term?.value === true
+    else if (field.kind === 'date') values[field.key] = (term?.value as string | null) ?? ''
     else if (field.kind === 'choice') values[field.key] = (term?.value as string | null) ?? field.options[0].value
     else {
       const value = term?.value
@@ -74,7 +87,9 @@ export default function CorrectionForm({ clauseId, clauseType, terms, onSaved, o
   }
 
   async function save(asChange: boolean) {
-    const missing = fields.find((f) => f.kind !== 'yes_no' && String(values[f.key]).trim() === '')
+    const missing = fields.find(
+        (f) => f.kind !== 'yes_no' && !OPTIONAL.has(f.key) && String(values[f.key]).trim() === '',
+      )
     if (missing) {
       setError(`Fill in the ${missing.label.toLowerCase()}.`)
       return
@@ -86,7 +101,9 @@ export default function CorrectionForm({ clauseId, clauseType, terms, onSaved, o
     setBusy(true)
     setError('')
     try {
-      const outcome = await reviewClause(clauseId, 'corrected', note.trim(), { values, asChange })
+            // Leave out optional fields that were left blank
+            const filled = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''))
+            const outcome = await reviewClause(clauseId, 'corrected', note.trim(), { values: filled, asChange })
       onSaved(outcome.message)
     } catch (err) {
       if (err instanceof BaselineConflictError) setConflict(err.message)
@@ -128,6 +145,8 @@ export default function CorrectionForm({ clauseId, clauseType, terms, onSaved, o
                     </option>
                   ))}
                 </select>
+              ) : field.kind === 'date' ? (
+                 <input id={id} type="date" value={String(values[field.key])} onChange={(e) => update(field.key, e.target.value)} />
               ) : (
                 <input
                   id={id}
