@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import deadlines, lookups
+from nonna import amendments, deadlines, lookups
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
@@ -72,6 +72,11 @@ never compare or filter values yourself, and write amounts as plain numbers in t
 ($1M is 1000000). Name the matching vendors and their sources. If the result lists vendors \
 with nothing on file, terms waiting for review, a confirmed missing clause, or a cap in another \
 currency, say so briefly, so the answer is never quietly incomplete.
+- For questions about how a contract reads today, what an amendment changed, or the current \
+wording of a section ("what does the Lucca MSA say now?", "what did Amendment No. 1 change?"), \
+use get_contract_as_amended. Nonna applies the amendments in code. Say which amendment made each \
+change and when. If it lists anything to check by hand, say so plainly. This is a reading aid \
+built from the signed documents, not a replacement for them.
 - When the user asks for key details, an overview, or a profile of a counterparty, use \
 get_counterparty_profile. The app shows it as a card, so reply with one or two sentences and \
 mention anything that needs attention (like terms waiting for review).
@@ -258,6 +263,24 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+        {
+        "name": "get_contract_as_amended",
+        "description": (
+            "How a contract reads today with its amendments applied, worked out in code. Returns "
+            "only the sections that amendments replaced, added, or deleted (with the original "
+            "wording), plus anything Nonna couldn't apply and flagged to check by hand. Pass "
+            "section to also get that section's current wording, changed or not. Get contract_id "
+            "from get_contracts."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "contract_id": {"type": "integer"},
+                "section": {"type": "string", "description": "A section number, like 11.2"},
+            },
+            "required": ["contract_id"],
+        },
+    },
     {
         "name": "get_review_queue",
         "description": (
@@ -283,6 +306,7 @@ STATUS_FOR_TOOL = {
     "get_review_queue": "Checked the review queue",
     "compare_vendors": "Compared every vendor",
     "get_deadlines": "Checked the calendar",
+    "get_contract_as_amended": "Read it with the amendments applied",
 }
 
 CLAUSE_LABELS = {
@@ -393,6 +417,18 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         title = f"Deadlines in the next {within} days" if within else "Expirations and renewals"
         _add_card(cards, Card(type="deadlines", title=title, data=data))
         return data
+    
+    if name == "get_contract_as_amended":
+        result = amendments.as_amended(session, tool_input["contract_id"])
+        wanted = tool_input.get("section")
+        # Only what changed (plus the one section asked about), not the whole contract
+        shown = [s for s in result.sections if s.status != "original" or s.number == wanted]
+        data = result.model_dump(mode="json")
+        data["sections"] = [s.model_dump(mode="json") for s in shown]
+        if wanted and not any(s.number == wanted for s in result.sections):
+            data["note"] = f"There's no Section {wanted} in this contract."
+        _add_card(cards, Card(type="amended", title=f"{result.contract.title}, as amended", data=data))
+        return data
 
     if name == "get_review_queue":
         queue = lookups.get_review_queue(session, tool_input.get("counterparty_id"))
@@ -435,7 +471,7 @@ def run_chat(session: Session, history: list[ChatMessage]) -> ChatResponse:
                 results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(output)}
                 )
-            except (lookups.NotFound, ValueError, KeyError) as error:
+            except (lookups.NotFound, amendments.NotFound, ValueError, KeyError) as error:
                 results.append(
                     {
                         "type": "tool_result",

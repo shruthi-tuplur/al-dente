@@ -2,6 +2,7 @@
 // from the database through the API, never from the LLM's own words.
 import type { ReactNode } from 'react'
 import { useBulkReview } from './bulkReview'
+import { AmendedSectionView, Unresolved } from './AsAmended'
 import ClauseBlock from './ClauseBlock'
 import { canCorrect } from './CorrectionForm'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
@@ -12,7 +13,7 @@ import {
   formatDate,
 } from './format'
 import type { Term } from './format'
-import type { Card } from './nonnaApi'
+import type { AmendedContract, Card } from './nonnaApi'
 
 interface Source {
   id: number
@@ -450,6 +451,29 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
     )
   }
 
+// What a contract's amendments changed. The amendments were applied in code, not by the model.
+function AmendedCard({ data }: { data: AmendedContract }) {
+    const changed = data.sections.filter((s) => s.status !== 'original').length
+    return (
+      <>
+        <p className="card-subtitle deadline-asof">
+          {data.amendments.length === 0
+            ? 'This contract has no amendments on file, so it reads as signed.'
+            : `${changed} ${changed === 1 ? 'section' : 'sections'} changed by ${data.amendments
+                .map((a) => a.title)
+                .join(', ')}. Confirm against the signed documents.`}
+        </p>
+        {data.note && <p className="card-empty">{data.note}</p>}
+        <Unresolved items={data.unresolved} />
+        <div className="amended-card">
+          {data.sections.map((section) => (
+            <AmendedSectionView key={`${section.number}-${section.status}`} section={section} />
+          ))}
+        </div>
+      </>
+    )
+  }
+
 function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     const bulk = useBulkReview(items.map((item) => item.clause.id))
     if (items.length === 0) return <p className="card-empty">Nothing is waiting for review.</p>
@@ -497,6 +521,9 @@ export default function CardView({ card }: { card: Card }) {
     case 'section':
         body = <SectionCard items={card.data as SectionTextData[]} />
         break
+    case 'amended':
+      body = <AmendedCard data={card.data as AmendedContract} />
+      break
     case 'deadlines':
       body = <DeadlinesCard data={card.data as DeadlinesData} />
       break

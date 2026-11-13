@@ -12,6 +12,7 @@ export type CardType =
   | 'review_queue'
   | 'vendors'
   | 'deadlines'
+  | 'amended'
 
 export interface Card {
   type: CardType
@@ -362,4 +363,41 @@ export async function fetchContractText(contractId: number): Promise<ContractTex
   const response = await fetch(`/api/contracts/${contractId}/text`)
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load that contract."))
   return (await response.json()) as ContractText
+}
+
+
+// ---------------------------------------------------------------------------
+// The "as amended" view
+// ---------------------------------------------------------------------------
+
+export interface ContractRef {
+  id: number
+  contract_type: string
+  title: string
+  effective_date: string
+}
+
+export interface AmendedSection {
+  number: string
+  heading: string
+  text: string
+  status: 'original' | 'replaced' | 'added' | 'deleted'
+  changed_by: ContractRef | null
+  original_text: string | null
+}
+
+export interface AmendedContract {
+  contract: ContractRef
+  amendments: ContractRef[]
+  sections: AmendedSection[]
+  unresolved: { amendment: ContractRef; section: string | null; wording: string }[]
+  changed_count: number
+  note?: string
+}
+
+// A contract as it reads today, with its amendments applied
+export async function fetchAsAmended(contractId: number): Promise<AmendedContract> {
+  const response = await fetch(`/api/contracts/${contractId}/as-amended`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't apply the amendments."))
+  return (await response.json()) as AmendedContract
 }

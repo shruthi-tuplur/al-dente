@@ -1219,3 +1219,72 @@
   font-size: 13px;
   color: var(--espresso-muted);
 }
+
+/* The "as amended" view */
+.amended-view {
+  margin-top: 10px;
+}
+
+.amended-doc {
+  display: grid;
+  gap: 10px;
+}
+
+.amended-section {
+  display: grid;
+  gap: 4px;
+}
+
+.amended-replaced,
+.amended-added,
+.amended-deleted {
+  border-left: 3px solid var(--saffron);
+  padding: 8px 0 8px 12px;
+  background: rgba(224, 176, 94, 0.08);
+  border-radius: 0 8px 8px 0;
+}
+
+.amended-tag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.amended-text {
+  white-space: pre-wrap;
+}
+
+.amended-original {
+  color: var(--espresso-muted);
+  text-decoration: line-through;
+  text-decoration-color: rgba(107, 84, 68, 0.4);
+}
+
+.amended-gone {
+  margin: 0;
+  font-style: italic;
+  color: var(--espresso-muted);
+}
+
+.amended-card {
+  display: grid;
+  gap: 12px;
+}
+
+.amended-unresolved {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(139, 28, 22, 0.06);
+  font-size: 13px;
+  color: var(--espresso);
+}
+
+.amended-unresolved ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

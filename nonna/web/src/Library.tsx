@@ -4,6 +4,7 @@ import CorrectionForm, { canCorrect } from './CorrectionForm'
 import { CLAUSE_LABELS, clauseLabel, describeTerms, formatDate } from './format'
 import type { ClauseType } from './format'
 import FullContract from './FullContract'
+import AsAmended from './AsAmended'
 import { fetchCounterparties, fetchLibrary } from './nonnaApi'
 import type {
   ContractType,
@@ -117,6 +118,8 @@ function ContractsTab({
   onChanged: () => void
 }) {
   const titles = new Map(library.contracts.map(({ contract }) => [contract.id, contract.title]))
+  const amendmentCount = (id: number) =>
+    library.contracts.filter(({ contract }) => contract.amends_contract_id === id).length
   const parentNote = (c: LibraryContract) => {
     const parent = c.parent_contract_id ?? c.amends_contract_id
     if (parent === null) return null
@@ -145,6 +148,9 @@ function ContractsTab({
                   {contract.status !== 'active' ? ` · ${contract.status}` : ''}
                 </p>
                 <FullContract contractId={contract.id} />
+                {amendmentCount(contract.id) > 0 && (
+                  <AsAmended contractId={contract.id} amendmentCount={amendmentCount(contract.id)} />
+                )}
                 {clauses.length === 0 ? (
                   <p className="card-empty">No clauses extracted from this contract yet.</p>
                 ) : (

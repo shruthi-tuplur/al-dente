@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import chat, deadlines, extraction, intake, lookups, reviews, sections
+from nonna import amendments, chat, deadlines, extraction, intake, lookups, reviews, sections
 from nonna.database import get_session
 from nonna.models import Contract
 from nonna.models import (
@@ -389,3 +389,13 @@ def get_deadlines(
 ) -> Deadlines:
     """Expirations, renewals, and notice deadlines for active contracts, soonest first."""
     return deadlines.get_deadlines(session, within_days, counterparty_id)
+
+
+
+@app.get("/contracts/{contract_id}/as-amended", response_model=amendments.AmendedContract)
+def get_contract_as_amended(contract_id: int, session: SessionDep) -> amendments.AmendedContract:
+    """A contract as it reads today, with its amendments applied. Worked out fresh every time."""
+    try:
+        return amendments.as_amended(session, contract_id)
+    except amendments.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
