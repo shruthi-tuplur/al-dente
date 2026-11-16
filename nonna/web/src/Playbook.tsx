@@ -7,156 +7,157 @@ import { CURRENT_USER, fetchPlaybook, updatePlaybookRule } from './nonnaApi'
 import type { PlaybookAssessment, PlaybookCheck, PlaybookRule, Tier } from './nonnaApi'
 
 export const TIER_LABELS: Record<Tier, string> = {
-    standard: 'Standard',
-    fallback: 'Fallback',
-    outside: 'Off playbook',
-    not_comparable: "Can't compare",
-  }
-  
-  export function PlaybookBadge({ assessment }: { assessment: PlaybookAssessment }) {
-    return (
-      <span className={`badge badge-tier-${assessment.tier}`} title={assessment.reason}>
-        {assessment.needs_sign_off ? 'Needs GC sign-off' : TIER_LABELS[assessment.tier]}
-      </span>
-    )
-  }
-  
-  // What the email to the GC is about
-  export interface EmailContext {
-    vendor: string
-    term: string
-    contract: { title: string; effective_date: string }
-  }
-  
-  // A draft email to the GC, opened in the attorney's own email app. Nothing is sent by Nonna.
-  function gcEmailLink(assessment: PlaybookAssessment, about: EmailContext): string {
-    const pending = assessment.needs_sign_off
-    const subject = pending
-      ? `GC sign-off needed: ${about.vendor} ${about.term.toLowerCase()}`
-      : `Off-playbook term: ${about.vendor} ${about.term.toLowerCase()}`
-    const lines = [
-      'Hi,',
-      '',
-      pending
-        ? `A new contract with ${about.vendor} has a term that's off our playbook, so I need your sign-off before I approve it.`
-        : `Flagging an off-playbook term in our signed contract with ${about.vendor}, so we can raise it at renewal or renegotiation.`,
-      '',
-      `Contract: ${about.contract.title}, effective ${formatDate(about.contract.effective_date)}`,
-      `Term: ${about.term}`,
-      `What it says: ${assessment.value}`,
-      `Why it's flagged: ${assessment.reason}`,
-      ...(assessment.guidance ? [`Our playbook: ${assessment.guidance}`] : []),
-      '',
-      pending
-        ? 'Can you let me know if this is okay to approve, and why? I\'ll record your answer in Nonna.'
-        : 'Let me know if you want to handle this differently.',
-      '',
-      'Thanks!',
-    ]
-    return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\r\n'))}`
-  }
-  
-  export function EmailGcLink({ assessment, about }: { assessment: PlaybookAssessment; about: EmailContext }) {
-    if (assessment.tier !== 'outside') return null
-    return (
-      <a className="playbook-email" href={gcEmailLink(assessment, about)}>
-        ✉ Email the GC
-      </a>
-    )
-  }
-  
-  // The playbook result for one clause, with the reason when it isn't simply standard
-  export function PlaybookNote({
-    assessment,
-    about,
-  }: {
-    assessment: PlaybookAssessment | null | undefined
-    about?: EmailContext
-  }) {
-    if (!assessment) return null
-    return (
-      <p className="playbook-note">
-        <PlaybookBadge assessment={assessment} />
-        {assessment.tier !== 'standard' && <span>{assessment.reason}</span>}
-        {about && <EmailGcLink assessment={assessment} about={about} />}
-      </p>
-    )
-  }
+  standard: 'Standard',
+  fallback: 'Fallback',
+  outside: 'Off playbook',
+  not_comparable: "Can't compare",
+}
+
+export function PlaybookBadge({ assessment }: { assessment: PlaybookAssessment }) {
+  return (
+    <span className={`badge badge-tier-${assessment.tier}`} title={assessment.reason}>
+      {assessment.needs_sign_off ? 'Needs GC sign-off' : TIER_LABELS[assessment.tier]}
+    </span>
+  )
+}
+
+// What the email to the GC is about
+export interface EmailContext {
+  vendor: string
+  term: string
+  contract: { title: string; effective_date: string }
+}
+
+// A draft email to the GC, opened in the attorney's own email app. Nothing is sent by Nonna.
+function gcEmailLink(assessment: PlaybookAssessment, about: EmailContext): string {
+  const pending = assessment.needs_sign_off
+  const subject = pending
+    ? `GC sign-off needed: ${about.vendor} ${about.term.toLowerCase()}`
+    : `Off-playbook term: ${about.vendor} ${about.term.toLowerCase()}`
+  const lines = [
+    'Hi,',
+    '',
+    pending
+      ? `A new contract with ${about.vendor} has a term that's off our playbook, so I need your sign-off before I approve it.`
+      : `Flagging an off-playbook term in our signed contract with ${about.vendor}, so we can raise it at renewal or renegotiation.`,
+    '',
+    `Contract: ${about.contract.title}, effective ${formatDate(about.contract.effective_date)}`,
+    `Term: ${about.term}`,
+    `What it says: ${assessment.value}`,
+    `Why it's flagged: ${assessment.reason}`,
+    ...(assessment.guidance ? [`Our playbook: ${assessment.guidance}`] : []),
+    '',
+    pending
+      ? 'Can you let me know if this is okay to approve, and why? I\'ll record your answer in Nonna.'
+      : 'Let me know if you want to handle this differently.',
+    '',
+    'Thanks!',
+  ]
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\r\n'))}`
+}
+
+export function EmailGcLink({ assessment, about }: { assessment: PlaybookAssessment; about: EmailContext }) {
+  if (assessment.tier !== 'outside') return null
+  return (
+    <a className="playbook-email" href={gcEmailLink(assessment, about)}>
+      ✉ Email the GC
+    </a>
+  )
+}
+
+// The playbook result for one clause, with the reason when it isn't simply standard
+export function PlaybookNote({
+  assessment,
+  about,
+}: {
+  assessment: PlaybookAssessment | null | undefined
+  about?: EmailContext
+}) {
+  if (!assessment) return null
+  return (
+    <p className="playbook-note">
+      <PlaybookBadge assessment={assessment} />
+      {assessment.tier !== 'standard' && <span>{assessment.reason}</span>}
+      {about && <EmailGcLink assessment={assessment} about={about} />}
+    </p>
+  )
+}
 
 // Every vendor down the side, every key term across the top
 export function PlaybookMatrix({ data }: { data: PlaybookCheck }) {
-    const columns = data.rules
-    const flagged = data.rows.flatMap((row) =>
-      columns
-        .map((rule) => ({ rule, cell: row.cells[rule.clause_type] }))
-        .filter(({ cell }) => cell && (cell.tier === 'outside' || cell.tier === 'not_comparable'))
-        .map(({ rule, cell }) => ({ vendor: row.counterparty_name, rule, cell: cell! })),
-    )
-  
-    return (
-      <>
-        <div className="playbook-table-wrap">
-          <table className="playbook-table">
-            <thead>
-              <tr>
-                <th scope="col">Vendor</th>
-                {columns.map((rule) => (
-                  <th key={rule.clause_type} scope="col">
-                    {rule.label}
-                  </th>
-                ))}
+  const columns = data.rules
+  const flagged = data.rows.flatMap((row) =>
+    columns
+      .map((rule) => ({ rule, cell: row.cells[rule.clause_type] }))
+      .filter(({ cell }) => cell && (cell.tier === 'outside' || cell.tier === 'not_comparable'))
+      .map(({ rule, cell }) => ({ vendor: row.counterparty_name, rule, cell: cell! })),
+  )
+
+  return (
+    <>
+      <div className="playbook-table-wrap">
+        <table className="playbook-table">
+          <thead>
+            <tr>
+              <th scope="col">Vendor</th>
+              {columns.map((rule) => (
+                <th key={rule.clause_type} scope="col">
+                  {rule.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((row) => (
+              <tr key={row.counterparty_id}>
+                <th scope="row">{row.counterparty_name}</th>
+                {columns.map((rule) => {
+                  const cell = row.cells[rule.clause_type]
+                  return (
+                    <td key={rule.clause_type}>
+                      {cell ? (
+                        <>
+                          <PlaybookBadge assessment={cell} />
+                          <span className="playbook-cell-value">{cell.value}</span>
+                        </>
+                      ) : (
+                        <span className="playbook-cell-empty">Nothing on file</span>
+                      )}
+                    </td>
+                  )
+                })}
               </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((row) => (
-                <tr key={row.counterparty_id}>
-                  <th scope="row">{row.counterparty_name}</th>
-                  {columns.map((rule) => {
-                    const cell = row.cells[rule.clause_type]
-                    return (
-                      <td key={rule.clause_type}>
-                        {cell ? (
-                          <>
-                            <PlaybookBadge assessment={cell} />
-                            <span className="playbook-cell-value">{cell.value}</span>
-                          </>
-                        ) : (
-                          <span className="playbook-cell-empty">Nothing on file</span>
-                        )}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {flagged.length > 0 && (
+        <div className="playbook-flags-wrap">
+          <p className="playbook-subhead">
+            Needs a look <span className="lib-group-count">{flagged.length}</span>
+          </p>
+          <ul className="playbook-flags">
+            {flagged.map(({ vendor, rule, cell }) => (
+              <li key={`${vendor}-${rule.clause_type}`} className="playbook-flag">
+                <div className="playbook-flag-head">
+                  <PlaybookBadge assessment={cell} />
+                  <span className="playbook-flag-vendor">{vendor}</span>
+                  <span className="playbook-flag-term">{rule.label}</span>
+                </div>
+                <p className="playbook-flag-reason">{cell.reason}</p>
+                <p className="playbook-flag-source">
+                  From {cell.source.title}, {formatDate(cell.source.effective_date)}
+                </p>
+                <EmailGcLink assessment={cell} about={{ vendor, term: rule.label, contract: cell.source }} />
+              </li>
+            ))}
+          </ul>
         </div>
-  
-        {flagged.length > 0 && (
-          <div className="playbook-flags-wrap">
-            <p className="playbook-subhead">
-              Needs a look <span className="lib-group-count">{flagged.length}</span>
-            </p>
-            <ul className="playbook-flags">
-              {flagged.map(({ vendor, rule, cell }) => (
-                <li key={`${vendor}-${rule.clause_type}`} className="playbook-flag">
-                  <div className="playbook-flag-head">
-                    <PlaybookBadge assessment={cell} />
-                    <span className="playbook-flag-vendor">{vendor}</span>
-                    <span className="playbook-flag-term">{rule.label}</span>
-                  </div>
-                  <p className="playbook-flag-reason">{cell.reason}</p>
-                  <p className="playbook-flag-source">
-                    From {cell.source.title}, {formatDate(cell.source.effective_date)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </>
-    )
-  }
+      )}
+    </>
+  )
+}
 
 // The settings each rule has, matching RULE_FIELDS in playbook.py
 type FieldKind = 'amount' | 'days' | 'months' | 'list' | 'yes_no'
