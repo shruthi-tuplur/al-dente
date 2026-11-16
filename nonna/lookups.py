@@ -17,6 +17,7 @@ from nonna.models import (
     CounterpartyPosition,
     ReviewDecision,
 )
+from nonna import playbook
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import (
     ClauseOut,
@@ -275,6 +276,7 @@ def get_review_queue(session: Session, counterparty_id: int | None = None) -> li
         query = query.where(Contract.counterparty_id == counterparty_id)
 
         positions: dict[int, list[PositionOut]] = {}  # per counterparty, so each is loaded once
+    rules = playbook.current_rules(session)
     items = []
     for c in session.scalars(query):
         counterparty_id = c.contract.counterparty_id
@@ -299,6 +301,7 @@ def get_review_queue(session: Session, counterparty_id: int | None = None) -> li
                 clause=clause,
                 agreed=agreed,
                 matches_agreed=matches,
+                playbook=playbook.assess_clause(rules, c),
             )
         )
     return items
@@ -626,8 +629,13 @@ def get_counterparty_library(session: Session, counterparty_id: int) -> Counterp
     ).all()
 
     by_contract: dict[int, list[ClauseOut]] = {}
+    rules = playbook.current_rules(session)
+    assessments = {}
     for clause in clauses:
         by_contract.setdefault(clause.contract_id, []).append(to_clause(clause))
+        result = playbook.assess_clause(rules, clause)
+        if result is not None:
+            assessments[clause.id] = result
 
     return CounterpartyLibrary(
         counterparty=detail,
@@ -650,6 +658,7 @@ def get_counterparty_library(session: Session, counterparty_id: int) -> Counterp
             )
         ],
         category_order=CATEGORY_ORDER,
+        playbook=assessments,
     )
 
 

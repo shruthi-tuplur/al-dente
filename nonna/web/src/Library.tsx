@@ -4,6 +4,7 @@ import CorrectionForm, { canCorrect } from './CorrectionForm'
 import { CLAUSE_LABELS, clauseLabel, describeTerms, formatDate } from './format'
 import type { ClauseType } from './format'
 import FullContract from './FullContract'
+import { PlaybookNote } from './Playbook'
 import AsAmended from './AsAmended'
 import { fetchCounterparties, fetchLibrary } from './nonnaApi'
 import type {
@@ -13,6 +14,7 @@ import type {
   LibraryClause,
   LibraryContract,
   LibrarySection,
+  PlaybookAssessment,
 } from './nonnaApi'
 
 const GROUPS: { type: ContractType; label: string }[] = [
@@ -32,6 +34,7 @@ function clauseSummary(clause: LibraryClause): string {
 interface Status {
   agreed: Set<number>
   superseded: Set<number>
+  playbook: Record<string, PlaybookAssessment> // by clause id
 }
 
 function statusBadge(clause: LibraryClause, status: Status) {
@@ -72,6 +75,7 @@ function ClauseRow({
         </span>
         {statusBadge(clause, agreed)}
       </div>
+      <PlaybookNote assessment={agreed.playbook[clause.id]} />
       {clause.full_text && (
         <details className="lib-wording">
           <summary>Show exact wording</summary>
@@ -360,6 +364,7 @@ export default function Library() {
   const agreed: Status = {
     agreed: new Set(library?.agreed_clause_ids ?? []),
     superseded: new Set(library?.superseded_clause_ids ?? []),
+    playbook: library?.playbook ?? {},
   }
 
   return (

@@ -5,6 +5,7 @@ import { canCorrect } from './CorrectionForm'
 import { clauseLabel, describeTerms, formatDate } from './format'
 import { fetchReviewQueue } from './nonnaApi'
 import type { LibraryClause, QueueItem } from './nonnaApi'
+import { PlaybookNote } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 
 function valueOf(clause: LibraryClause): string {
@@ -55,6 +56,14 @@ function ContractGroup({ items, onDecided }: { items: QueueItem[]; onDecided: ()
               <span className="card-value">{valueOf(item.clause)}</span>
             </div>
             <Comparison item={item} />
+            <PlaybookNote
+              assessment={item.playbook}
+              about={{
+                vendor: item.counterparty_name,
+                term: clauseLabel(item.clause.clause_type),
+                contract: item.source,
+              }}
+            />
             <span className="quote">
               {item.clause.section_number ? `§${item.clause.section_number}` : 'No section'}
               {item.clause.heading ? ` · ${item.clause.heading}` : ''}

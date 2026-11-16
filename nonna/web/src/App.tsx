@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import CardView from './CardView'
 import IntakeCard from './IntakeCard'
 import Library from './Library'
+import Playbook from './Playbook'
 import Review from './Review'
 import RichText from './RichText'
 import { askNonna, fetchReviewQueue, uploadContract } from './nonnaApi'
@@ -11,7 +12,7 @@ import './App.css'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
-  const [view, setView] = useState<'chat' | 'library' | 'review'>('chat')
+  const [view, setView] = useState<'chat' | 'library' | 'review' | 'playbook'>('chat')
   const [pendingCount, setPendingCount] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [waiting, setWaiting] = useState(false)
@@ -144,11 +145,20 @@ export default function App() {
             Review
             {pendingCount ? <span className="view-count">{pendingCount}</span> : null}
           </button>
+          <button
+            type="button"
+            className={view === 'playbook' ? 'view-btn view-btn-active' : 'view-btn'}
+            aria-current={view === 'playbook' ? 'page' : undefined}
+            onClick={() => setView('playbook')}
+          >
+            Playbook
+          </button>
         </nav>
       </header>
 
       {view === 'library' && <Library />}
       {view === 'review' && <Review onDecided={refreshPendingCount} />}
+      {view === 'playbook' && <Playbook />}
 
       <main className="chat" aria-live="polite" hidden={view !== 'chat'}>
         <div className="thread">

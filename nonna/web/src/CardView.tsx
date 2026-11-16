@@ -5,6 +5,7 @@ import { useBulkReview } from './bulkReview'
 import { AmendedSectionView, Unresolved } from './AsAmended'
 import ClauseBlock from './ClauseBlock'
 import { canCorrect } from './CorrectionForm'
+import { PlaybookMatrix } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import {
   CONTRACT_TYPE_LABELS,
@@ -13,7 +14,7 @@ import {
   formatDate,
 } from './format'
 import type { Term } from './format'
-import type { AmendedContract, Card } from './nonnaApi'
+import type { AmendedContract, Card, PlaybookCheck } from './nonnaApi'
 
 interface Source {
   id: number
@@ -523,6 +524,9 @@ export default function CardView({ card }: { card: Card }) {
         break
     case 'amended':
       body = <AmendedCard data={card.data as AmendedContract} />
+      break
+    case 'playbook':
+      body = <PlaybookMatrix data={card.data as PlaybookCheck} />
       break
     case 'deadlines':
       body = <DeadlinesCard data={card.data as DeadlinesData} />

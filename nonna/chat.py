@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import amendments, deadlines, lookups
+from nonna import amendments, deadlines, lookups, playbook
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
@@ -60,7 +60,17 @@ say "here's what the contract says", never "this is what was agreed". If several
 have the clause, mention which ones and their dates, and don't decide which one controls.
 - If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts. \
 Drafting is not available yet.
-- Do not give legal advice or opinions about whether a term is good. Report what was agreed.
+- Do not give legal advice or your own opinion about whether a term is good. Report what was \
+agreed. The one yardstick you can use is Aurelia's playbook, the company's own standard positions.
+- For questions about the playbook or how vendors measure up ("what's our standard cap?", \
+"is Lucca's deal within our playbook?", "which vendors are outside our playbook?"), use \
+check_playbook. The tool decides every tier in code: Standard (meets our standard), Fallback \
+(below standard but acceptable without escalating), Off playbook (tier "outside": below even \
+our fallback), or Can't compare (check by hand). Never decide or change a tier yourself. Lead \
+with anything off playbook, then Fallback, and say the playbook's guidance for it. These are \
+signed contracts, so an off-playbook term is something to raise at renewal or renegotiation, \
+not something to approve now. A term still waiting for review that's off playbook needs GC \
+sign-off before anyone approves it. Always say "Aurelia's playbook", not your view.
 - If a question is ambiguous (which counterparty, which contract), ask one short question.
 - When the user asks for the exact wording, language, or text of one of the four tracked \
 clauses, use get_clause_text. For any other clause, use get_section_text. Both show the \
@@ -282,6 +292,22 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "check_playbook",
+        "description": (
+            "Aurelia's playbook (our standard position and fallback for each key term, plus "
+            "guidance) and how each vendor's agreed master-agreement terms measure up: Standard, "
+            "Fallback, Outside (needs GC sign-off), or Can't compare. Tiers are worked out in code. "
+            "Leave out counterparty_id for every vendor, and clause_type for every term."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "counterparty_id": {"type": "integer"},
+                "clause_type": {"type": "string", "enum": playbook.CLAUSE_TYPES},
+            },
+        },
+    },
+    {
         "name": "get_review_queue",
         "description": (
             "Extracted clauses waiting for an attorney to review. Leave out counterparty_id "
@@ -307,6 +333,7 @@ STATUS_FOR_TOOL = {
     "compare_vendors": "Compared every vendor",
     "get_deadlines": "Checked the calendar",
     "get_contract_as_amended": "Read it with the amendments applied",
+    "check_playbook": "Checked against our playbook",
 }
 
 CLAUSE_LABELS = {
@@ -428,6 +455,22 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         if wanted and not any(s.number == wanted for s in result.sections):
             data["note"] = f"There's no Section {wanted} in this contract."
         _add_card(cards, Card(type="amended", title=f"{result.contract.title}, as amended", data=data))
+        return data
+
+    if name == "check_playbook":
+        result = playbook.check_vendors(session, tool_input.get("counterparty_id"))
+        wanted = tool_input.get("clause_type")
+        data = result.model_dump(mode="json")
+        if wanted:
+            data["rules"] = [r for r in data["rules"] if r["clause_type"] == wanted]
+            for row in data["rows"]:
+                row["cells"] = {wanted: row["cells"].get(wanted)}
+            data["outside_count"] = sum(
+                1 for row in data["rows"] if (row["cells"][wanted] or {}).get("tier") == "outside"
+            )
+        names = [r["counterparty_name"] for r in data["rows"]]
+        title = f"{names[0]} vs our playbook" if tool_input.get("counterparty_id") and names else "Vendors vs our playbook"
+        _add_card(cards, Card(type="playbook", title=title, data=data))
         return data
 
     if name == "get_review_queue":

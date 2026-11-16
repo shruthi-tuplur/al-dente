@@ -128,6 +128,19 @@ class HistoryEntry(BaseModel):
     decisions: list[DecisionOut]
 
 
+Tier = Literal["standard", "fallback", "outside", "not_comparable"]
+
+
+class PlaybookAssessment(BaseModel):
+    """Where a term lands against Aurelia's playbook. Worked out by code, never the model."""
+
+    tier: Tier
+    reason: str  # plain English
+    value: str = ""  # the term as Nonna reads it, like "$500,000" or "Net 30"
+    needs_sign_off: bool = False  # off playbook and still waiting for review, so ask the GC first
+    guidance: str | None = None  # the playbook's advice for this term
+
+
 class ReviewQueueItem(BaseModel):
     counterparty_id: int
     counterparty_name: str
@@ -135,6 +148,7 @@ class ReviewQueueItem(BaseModel):
     clause: ClauseOut
     agreed: PositionOut | None = None  # the current agreed term this would be compared to
     matches_agreed: bool | None = None  # None when there's nothing agreed yet to compare to
+    playbook: PlaybookAssessment | None = None  # how it compares to our standard
 
 # ---------------------------------------------------------------------------
 # Comparing one term across every vendor
@@ -253,7 +267,7 @@ class ChatRequest(BaseModel):
 
 CardType = LiteralCardType = Literal[
     "profile", "clause", "section", "positions", "history", "contracts", "review_queue", "vendors",
-    "deadlines", "amended",
+    "deadlines", "amended", "playbook",
 ]
 
 
@@ -322,6 +336,7 @@ class CounterpartyLibrary(BaseModel):
     superseded_clause_ids: list[int]  # used to be agreed, replaced by a later version
     sections: list[SectionOut]  # every clause, as written
     category_order: list[str]  # the order to show clause categories in
+    playbook: dict[int, PlaybookAssessment] = {}  # by clause id: how each compares to our standard
 
 
 class ContractText(BaseModel):

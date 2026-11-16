@@ -12,6 +12,7 @@ BEGIN;
 -- Hide "does not exist, skipping" notices on a fresh database
 SET LOCAL client_min_messages TO warning;
 
+DROP TABLE IF EXISTS playbook_rules CASCADE;
 DROP TABLE IF EXISTS contract_sections CASCADE;
 
 DROP TABLE IF EXISTS counterparty_positions CASCADE;
@@ -269,5 +270,23 @@ CREATE TABLE contract_sections (
 );
 
 CREATE INDEX contract_sections_category_idx ON contract_sections (category);
+
+-- Aurelia's playbook: our standard position for each key term, and the fallback we'll accept.
+-- Run add_playbook.sql after the seed files to fill in the starting rules.
+CREATE TABLE playbook_rules (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    clause_type    TEXT NOT NULL CHECK (clause_type IN
+                     ('liability_cap', 'payment_terms', 'governing_law', 'indemnification', 'term_renewal')),
+    standard       JSONB NOT NULL,   -- what we ask for
+    fallback       JSONB NOT NULL,   -- the least we'll accept without escalating
+    guidance       TEXT NOT NULL,    -- what to tell the attorney, in plain English
+    note           TEXT,             -- why this version of the rule was set
+    set_by         TEXT NOT NULL,
+    set_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    superseded_at  TIMESTAMPTZ       -- null means this is the current rule
+);
+
+-- Only one current rule per clause type
+CREATE UNIQUE INDEX playbook_rules_current ON playbook_rules (clause_type) WHERE superseded_at IS NULL;
 
 COMMIT;

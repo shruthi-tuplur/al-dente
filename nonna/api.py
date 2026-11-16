@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import amendments, chat, deadlines, extraction, intake, lookups, reviews, sections
+from nonna import amendments, chat, deadlines, extraction, intake, lookups, playbook, reviews, sections
 from nonna.database import get_session
 from nonna.models import Contract
 from nonna.models import (
@@ -399,3 +399,20 @@ def get_contract_as_amended(contract_id: int, session: SessionDep) -> amendments
         return amendments.as_amended(session, contract_id)
     except amendments.NotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+
+
+
+
+@app.get("/playbook", response_model=playbook.PlaybookCheck)
+def get_playbook(session: SessionDep, counterparty_id: int | None = None) -> playbook.PlaybookCheck:
+    """Aurelia's playbook, and how every vendor's agreed terms measure up against it."""
+    return playbook.check_vendors(session, counterparty_id)
+
+
+@app.put("/playbook/{clause_type}", response_model=playbook.RuleOut)
+def update_playbook_rule(clause_type: str, change: playbook.RuleIn, session: SessionDep) -> playbook.RuleOut:
+    """Save a new version of one playbook rule. The old version is kept as history."""
+    try:
+        return playbook.update_rule(session, clause_type, change)
+    except playbook.RuleRejected as error:
+        raise HTTPException(422, str(error)) from error

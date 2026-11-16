@@ -13,6 +13,7 @@ export type CardType =
   | 'vendors'
   | 'deadlines'
   | 'amended'
+  | 'playbook'
 
 export interface Card {
   type: CardType
@@ -271,6 +272,7 @@ export interface QueueItem {
   clause: LibraryClause
   agreed: { applies_to: string[]; source: QueueSource; clause: LibraryClause } | null
   matches_agreed: boolean | null
+  playbook: PlaybookAssessment | null
 }
 
 // Every extracted clause still waiting for an attorney, oldest upload first
@@ -326,6 +328,7 @@ export interface CounterpartyLibrary {
   superseded_clause_ids: number[]
   sections: LibrarySection[]
   category_order: string[]
+  playbook: Record<string, PlaybookAssessment> // by clause id
 }
 
 export interface LibrarySection {
@@ -400,4 +403,69 @@ export async function fetchAsAmended(contractId: number): Promise<AmendedContrac
   const response = await fetch(`/api/contracts/${contractId}/as-amended`)
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't apply the amendments."))
   return (await response.json()) as AmendedContract
+}
+
+
+// ---------------------------------------------------------------------------
+// Aurelia's playbook
+// ---------------------------------------------------------------------------
+
+export type Tier = 'standard' | 'fallback' | 'outside' | 'not_comparable'
+
+export interface PlaybookAssessment {
+  tier: Tier
+  reason: string
+  value: string // the term as Nonna reads it, like "$500,000"
+  needs_sign_off: boolean // off playbook and still waiting for review
+  guidance: string | null // the playbook's advice for this term
+}
+
+export interface PlaybookRule {
+  clause_type: string
+  label: string
+  standard: Record<string, unknown>
+  fallback: Record<string, unknown>
+  standard_text: string
+  fallback_text: string
+  guidance: string
+  note: string | null
+  set_by: string
+  set_at: string
+  version: number
+}
+
+export interface PlaybookCell extends PlaybookAssessment {
+  source: ContractRef
+}
+
+export interface PlaybookCheck {
+  rules: PlaybookRule[]
+  rows: { counterparty_id: number; counterparty_name: string; cells: Record<string, PlaybookCell | null> }[]
+  outside_count: number
+}
+
+export async function fetchPlaybook(): Promise<PlaybookCheck> {
+  const response = await fetch('/api/playbook')
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load the playbook."))
+  return (await response.json()) as PlaybookCheck
+}
+
+// Save a new version of one rule. A note saying why is required.
+export async function updatePlaybookRule(
+  clauseType: string,
+  change: {
+    standard: Record<string, string | boolean>
+    fallback: Record<string, string | boolean>
+    guidance: string
+    note: string
+    set_by: string
+  },
+): Promise<PlaybookRule> {
+  const response = await fetch(`/api/playbook/${clauseType}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(change),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't save that rule."))
+  return (await response.json()) as PlaybookRule
 }

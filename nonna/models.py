@@ -242,3 +242,29 @@ class ContractSection(Base):
 
     def __repr__(self) -> str:
         return f"<ContractSection {self.category} §{self.section_number} in contract {self.contract_id}>"
+
+
+
+
+
+class PlaybookRule(Base):
+    """Aurelia's standard position for one clause type, and the fallback we'll accept.
+
+    The current rule has superseded_at = None. Older versions are kept as history.
+    """
+
+    __tablename__ = "playbook_rules"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    clause_type: Mapped[str] = mapped_column(Text)
+    standard: Mapped[dict] = mapped_column(JSONB)
+    fallback: Mapped[dict] = mapped_column(JSONB)
+    guidance: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    set_by: Mapped[str] = mapped_column(Text)
+    set_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, server_default=func.now())
+    superseded_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ)
+
+    def __repr__(self) -> str:
+        state = "current" if self.superseded_at is None else "superseded"
+        return f"<PlaybookRule {self.clause_type} ({state})>"

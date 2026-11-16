@@ -1288,3 +1288,264 @@
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+/* Playbook */
+.badge-tier-standard {
+  background: rgba(82, 94, 53, 0.14);
+  color: var(--basil);
+}
+
+.badge-tier-fallback {
+  background: rgba(224, 176, 94, 0.25);
+  color: var(--espresso);
+}
+
+.badge-tier-outside {
+  background: rgba(139, 28, 22, 0.1);
+  color: var(--nonna-red);
+}
+
+.badge-tier-not_comparable {
+  background: #f3efe8;
+  color: var(--espresso-muted);
+  border: 1px dashed #d8d0c4;
+}
+
+.playbook-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--espresso-muted);
+}
+
+/* The page uses the full width, with breathing room on the sides */
+.playbook-page {
+  width: calc(100% - 64px);
+  max-width: 1440px;
+  padding: 32px 40px 48px;
+}
+
+.playbook-page .lib-group {
+  margin-top: 40px;
+}
+
+.playbook-intro {
+  margin: 4px 0 20px;
+  font-size: 14px;
+  color: var(--espresso-muted);
+}
+
+.playbook-subhead {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--espresso);
+}
+
+.playbook-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #efeae3;
+  border-radius: 12px;
+}
+
+.playbook-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.playbook-table th,
+.playbook-table td {
+  padding: 16px 20px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #efeae3;
+}
+
+.playbook-table tbody tr:last-child th,
+.playbook-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.playbook-table tbody tr:hover {
+  background: #fcfaf7;
+}
+
+.playbook-table thead th {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--espresso-muted);
+  background: #faf8f5;
+  white-space: nowrap;
+}
+
+.playbook-table tbody th {
+  font-weight: 500;
+  color: var(--espresso);
+  min-width: 180px;
+}
+
+.playbook-table td .badge {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.playbook-cell-value {
+  display: block;
+  color: var(--espresso);
+  line-height: 1.45;
+  min-width: 130px;
+}
+
+.playbook-cell-empty {
+  color: var(--espresso-muted);
+  font-style: italic;
+}
+
+/* The flagged terms, one roomy card each */
+.playbook-flags-wrap {
+  margin-top: 36px;
+}
+
+.playbook-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.playbook-flag {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 16px 18px;
+  border: 1px solid #efeae3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.playbook-flag-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.playbook-flag-vendor {
+  font-weight: 500;
+  color: var(--espresso);
+}
+
+.playbook-flag-term {
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.playbook-flag-term::before {
+  content: '· ';
+}
+
+.playbook-flag-reason {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--espresso);
+}
+
+.playbook-flag-source {
+  margin: 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--espresso-muted);
+}
+
+/* The rules, two across on wide screens */
+.playbook-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: 16px;
+}
+
+.playbook-rule {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid #efeae3;
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+
+.playbook-rule-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--espresso);
+}
+
+.playbook-rule-tiers {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.playbook-rule-tiers div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.playbook-rule-tiers dt {
+  width: 82px;
+  flex-shrink: 0;
+}
+
+.playbook-rule-tiers dd {
+  margin: 0;
+  color: var(--espresso);
+}
+
+.playbook-guidance {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--espresso-muted);
+}
+
+
+.playbook-email {
+  justify-self: start;
+  font-size: 13px;
+  color: var(--nonna-red);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.playbook-email:hover {
+  text-decoration: underline;
+}
+
+/* Inside a chat card, keep the flags and rules in one column */
+.nonna-card .playbook-flags {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 760px) {
+  .playbook-page {
+    width: 100%;
+    padding: 20px 16px 32px;
+  }
+
+  .playbook-flags,
+  .playbook-rules {
+    grid-template-columns: 1fr;
+  }
+}
