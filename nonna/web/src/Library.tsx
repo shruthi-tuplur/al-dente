@@ -6,6 +6,7 @@ import type { ClauseType } from './format'
 import FullContract from './FullContract'
 import { PlaybookNote } from './Playbook'
 import AsAmended from './AsAmended'
+import DraftTab from './Draft'
 import { fetchCounterparties, fetchLibrary } from './nonnaApi'
 import type {
   ContractType,
@@ -329,7 +330,7 @@ export default function Library() {
   const [vendors, setVendors] = useState<CounterpartySummary[] | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [library, setLibrary] = useState<CounterpartyLibrary | null>(null)
-  const [tab, setTab] = useState<'contracts' | 'clauses'>('contracts')
+  const [tab, setTab] = useState<'contracts' | 'clauses' | 'draft'>('contracts')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -366,6 +367,10 @@ export default function Library() {
     superseded: new Set(library?.superseded_clause_ids ?? []),
     playbook: library?.playbook ?? {},
   }
+
+  // Only vendors with an SOW on file can have a new one drafted
+  const canDraft = library?.contracts.some(({ contract }) => contract.contract_type === 'SOW') ?? false
+  const shownTab = tab === 'draft' && !canDraft ? 'contracts' : tab
 
   return (
     <div className="library">
@@ -405,8 +410,8 @@ export default function Library() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={tab === 'contracts'}
-                className={tab === 'contracts' ? 'lib-tab lib-tab-active' : 'lib-tab'}
+                aria-selected={shownTab === 'contracts'}
+                className={shownTab === 'contracts' ? 'lib-tab lib-tab-active' : 'lib-tab'}
                 onClick={() => setTab('contracts')}
               >
                 Contracts
@@ -414,18 +419,36 @@ export default function Library() {
               <button
                 type="button"
                 role="tab"
-                aria-selected={tab === 'clauses'}
-                className={tab === 'clauses' ? 'lib-tab lib-tab-active' : 'lib-tab'}
+                aria-selected={shownTab === 'clauses'}
+                className={shownTab === 'clauses' ? 'lib-tab lib-tab-active' : 'lib-tab'}
                 onClick={() => setTab('clauses')}
               >
                 Clauses
               </button>
+              {canDraft && (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={shownTab === 'draft'}
+                  className={shownTab === 'draft' ? 'lib-tab lib-tab-active' : 'lib-tab'}
+                  onClick={() => setTab('draft')}
+                >
+                  Draft a new SOW
+                </button>
+              )}
             </div>
 
-            {tab === 'contracts' ? (
-              <ContractsTab library={library} agreed={agreed} onChanged={refresh} />
-            ) : (
-              <ClausesTab library={library} agreed={agreed} onChanged={refresh} />
+            {shownTab === 'contracts' && <ContractsTab library={library} agreed={agreed} onChanged={refresh} />}
+            {shownTab === 'clauses' && <ClausesTab library={library} agreed={agreed} onChanged={refresh} />}
+            {/* Kept mounted so a draft isn't lost when switching tabs */}
+            {canDraft && (
+              <div hidden={shownTab !== 'draft'}>
+                <DraftTab
+                  key={library.counterparty.id}
+                  counterpartyId={library.counterparty.id}
+                  vendorName={library.counterparty.name}
+                />
+              </div>
             )}
           </>
         )}

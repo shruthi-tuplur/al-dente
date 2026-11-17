@@ -469,3 +469,62 @@ export async function updatePlaybookRule(
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't save that rule."))
   return (await response.json()) as PlaybookRule
 }
+
+
+
+// ---------------------------------------------------------------------------
+// Drafting from history
+// ---------------------------------------------------------------------------
+
+export interface DraftSection {
+  kind: 'title' | 'preamble' | 'article' | 'signatures'
+  number: string
+  heading: string
+  text: string // one paragraph per line; table rows use " | " between cells
+  label: 'verbatim' | 'adapted' | 'new'
+  source: string
+  original: string | null
+  note: string | null
+  checks: string[]
+}
+
+export interface Draft {
+  counterparty_id: number
+  counterparty_name: string
+  contract_type: string
+  number: number
+  brief: string
+  template: string
+  sections: DraftSection[]
+  blanks: number
+}
+
+// Start a new SOW from this vendor's last one and a short brief. Nothing is saved.
+export async function makeDraft(counterpartyId: number, brief: string): Promise<Draft> {
+  const response = await fetch(`/api/counterparties/${counterpartyId}/drafts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ brief, contract_type: 'SOW' }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't make that draft."))
+  return (await response.json()) as Draft
+}
+
+// Download the reviewed draft (with any edits) as a Word file
+export async function downloadDraft(draft: Draft): Promise<void> {
+  const response = await fetch('/api/drafts/docx', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(draft),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't make the Word file."))
+  const name =
+    response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ??
+    `${draft.counterparty_name} SOW No. ${draft.number} draft.docx`
+  const url = URL.createObjectURL(await response.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
+}

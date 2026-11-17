@@ -11,11 +11,11 @@ from typing import Annotated
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import amendments, chat, deadlines, extraction, intake, lookups, playbook, reviews, sections
+from nonna import amendments, chat, deadlines, drafting, extraction, intake, lookups, playbook, reviews, sections
 from nonna.database import get_session
 from nonna.models import Contract
 from nonna.models import (
@@ -416,3 +416,26 @@ def update_playbook_rule(clause_type: str, change: playbook.RuleIn, session: Ses
         return playbook.update_rule(session, clause_type, change)
     except playbook.RuleRejected as error:
         raise HTTPException(422, str(error)) from error
+
+
+
+
+
+@app.post("/counterparties/{counterparty_id}/drafts", response_model=drafting.Draft)
+def make_draft(counterparty_id: int, change: drafting.DraftIn, session: SessionDep) -> drafting.Draft:
+    """Start a new SOW from this vendor's last one and the attorney's brief. Nothing is saved."""
+    try:
+        return drafting.make_draft(session, counterparty_id, change)
+    except drafting.DraftUnavailable as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/drafts/docx")
+def download_draft(draft: drafting.Draft) -> Response:
+    """The reviewed draft (with any edits) as a Word file."""
+    filename = drafting.docx_name(draft)
+    return Response(
+        content=drafting.to_docx(draft),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
