@@ -5,6 +5,7 @@ import { useBulkReview } from './bulkReview'
 import { AmendedSectionView, Unresolved } from './AsAmended'
 import ClauseBlock from './ClauseBlock'
 import { canCorrect } from './CorrectionForm'
+import { DraftSummaryCard } from './Draft'
 import { PlaybookMatrix } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import {
@@ -14,7 +15,7 @@ import {
   formatDate,
 } from './format'
 import type { Term } from './format'
-import type { AmendedContract, Card, PlaybookCheck } from './nonnaApi'
+import type { AmendedContract, Card, Draft, PlaybookCheck } from './nonnaApi'
 
 interface Source {
   id: number
@@ -510,7 +511,7 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     )
   }
 
-export default function CardView({ card }: { card: Card }) {
+export default function CardView({ card, onOpenDraft }: { card: Card; onOpenDraft?: (draft: Draft) => void }) {
   let body: ReactNode = null
   switch (card.type) {
     case 'profile':
@@ -527,6 +528,9 @@ export default function CardView({ card }: { card: Card }) {
       break
     case 'playbook':
       body = <PlaybookMatrix data={card.data as PlaybookCheck} />
+      break
+    case 'draft':
+      body = <DraftSummaryCard draft={card.data as Draft} onOpen={onOpenDraft} />
       break
     case 'deadlines':
       body = <DeadlinesCard data={card.data as DeadlinesData} />

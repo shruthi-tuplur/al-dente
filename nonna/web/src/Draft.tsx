@@ -213,9 +213,74 @@ function SectionCard({
   )
 }
 
-export default function DraftTab({ counterpartyId, vendorName }: { counterpartyId: number; vendorName: string }) {
-  const [brief, setBrief] = useState('')
-  const [draft, setDraft] = useState<Draft | null>(null)
+// The draft as a short card in the chat, with a button to open it in the Draft tab
+export function DraftSummaryCard({ draft, onOpen }: { draft: Draft; onOpen?: (draft: Draft) => void }) {
+  const [downloading, setDownloading] = useState(false)
+  const [error, setError] = useState('')
+  const verbatim = draft.sections.filter((s) => s.label === 'verbatim').length
+  const checks = draft.sections.flatMap((s) => s.checks)
+  const changes = draft.sections.filter((s) => s.note && s.note !== 'Adapted from your brief.')
+
+  async function download() {
+    setDownloading(true)
+    setError('')
+    try {
+      await downloadDraft(draft)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't make the Word file.")
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  return (
+    <div className="draft-card">
+      <p className="card-subtitle">
+        Started from {draft.template} · {verbatim} verbatim · {draft.sections.length - verbatim} adapted ·{' '}
+        {draft.blanks} {draft.blanks === 1 ? 'blank' : 'blanks'} to fill in
+      </p>
+      {changes.length > 0 && (
+        <ul className="draft-card-notes">
+          {changes.map((s, i) => (
+            <li key={i}>
+              <strong>{sectionTitle(s)}:</strong> {s.note}
+            </li>
+          ))}
+        </ul>
+      )}
+      {checks.length > 0 && (
+        <ul className="draft-checks">
+          {checks.map((check) => (
+            <li key={check}>⚠ {check}</li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="intake-error">⚠ {error}</p>}
+      <div className="playbook-actions">
+        {onOpen && (
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpen(draft)}>
+            Open in Draft tab
+          </button>
+        )}
+        <button type="button" className="btn btn-sm btn-quiet" onClick={download} disabled={downloading}>
+          {downloading ? 'Making the file…' : 'Download .docx'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function DraftTab({
+  counterpartyId,
+  vendorName,
+  initialDraft = null,
+}: {
+  counterpartyId: number
+  vendorName: string
+  initialDraft?: Draft | null
+}) {
+  const [brief, setBrief] = useState(initialDraft?.brief ?? '')
+  const [draft, setDraft] = useState<Draft | null>(initialDraft)
   const [edited, setEdited] = useState<Set<number>>(new Set())
   const [working, setWorking] = useState(false)
   const [downloading, setDownloading] = useState(false)

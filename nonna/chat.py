@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import amendments, deadlines, lookups, playbook
+from nonna import amendments, deadlines, drafting, lookups, playbook
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
@@ -58,10 +58,18 @@ so on) is filed by topic exactly as written. Use list_clause_topics to see what'
 get_section_text to pull the wording. These are not reviewed and have no agreed baseline, so \
 say "here's what the contract says", never "this is what was agreed". If several contracts \
 have the clause, mention which ones and their dates, and don't decide which one controls.
-- If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts. \
-Drafting is not available yet.
+- If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts.
 - Do not give legal advice or your own opinion about whether a term is good. Report what was \
 agreed. The one yardstick you can use is Aurelia's playbook, the company's own standard positions.
+- Never write contract language yourself: no clauses, SOW sections, or amendment wording, not \
+even a sample. To start a new SOW with a vendor, use draft_sow, which copies what was already \
+agreed and checks its own numbers. If they ask to draft anything other than an SOW, say Nonna \
+can only draft SOWs from history for now.
+- draft_sow needs a brief: what the new project is, and any scope, fees, or timing the user \
+gave. Pass their own words and don't add facts. If they haven't said what the project is, ask \
+first. After it runs, say in a few bullets what it started from, what Nonna set (like payment \
+terms), how many blanks are left, and any things to check. Don't quote or write clause text: \
+the card shows the draft, and they can open it in the Draft tab to review, edit, and download.
 - For questions about the playbook or how vendors measure up ("what's our standard cap?", \
 "is Lucca's deal within our playbook?", "which vendors are outside our playbook?"), use \
 check_playbook. The tool decides every tier in code: Standard (meets our standard), Fallback \
@@ -292,6 +300,27 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "draft_sow",
+        "description": (
+            "Start the next SOW with a vendor from what was already agreed, using the same "
+            "drafting code as the Library's Draft tab: standard wording copied word for word, deal "
+            "sections adapted from the brief with [blanks] for anything missing, payment terms set "
+            "by code to what was agreed, and every number checked. Nothing is saved. Needs the "
+            "vendor's counterparty_id (use find_counterparty first) and the brief."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "counterparty_id": {"type": "integer"},
+                "brief": {
+                    "type": "string",
+                    "description": "The new project, in the user's own words. Don't add facts they didn't give.",
+                },
+            },
+            "required": ["counterparty_id", "brief"],
+        },
+    },
+    {
         "name": "check_playbook",
         "description": (
             "Aurelia's playbook (our standard position and fallback for each key term, plus "
@@ -334,6 +363,7 @@ STATUS_FOR_TOOL = {
     "get_deadlines": "Checked the calendar",
     "get_contract_as_amended": "Read it with the amendments applied",
     "check_playbook": "Checked against our playbook",
+    "draft_sow": "Drafted from what you've agreed",
 }
 
 CLAUSE_LABELS = {
@@ -456,6 +486,34 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
             data["note"] = f"There's no Section {wanted} in this contract."
         _add_card(cards, Card(type="amended", title=f"{result.contract.title}, as amended", data=data))
         return data
+
+    if name == "draft_sow":
+        try:
+            draft = drafting.make_draft(
+                session, int(tool_input["counterparty_id"]), drafting.DraftIn(brief=str(tool_input.get("brief", "")))
+            )
+        except drafting.DraftUnavailable as error:
+            raise ValueError(str(error)) from error
+        _add_card(cards, Card(
+            type="draft",
+            title=f"Draft SOW No. {draft.number} with {draft.counterparty_name}",
+            data=draft.model_dump(mode="json"),
+        ))
+        # The model gets a summary only. The wording stays in the card, so it can't be retyped or changed.
+        return {
+            "sow_number": draft.number,
+            "vendor": draft.counterparty_name,
+            "started_from": draft.template,
+            "verbatim_sections": sum(s.label == "verbatim" for s in draft.sections),
+            "adapted_sections": sum(s.label != "verbatim" for s in draft.sections),
+            "blanks_to_fill_in": draft.blanks,
+            "things_to_check": [c for s in draft.sections for c in s.checks],
+            "what_nonna_changed": [
+                f"{s.number + '. ' if s.number else ''}{s.heading or s.kind}: {s.note}"
+                for s in draft.sections
+                if s.note and s.note != "Adapted from your brief."
+            ],
+        }
 
     if name == "check_playbook":
         result = playbook.check_vendors(session, tool_input.get("counterparty_id"))

@@ -7,13 +7,14 @@ import Playbook from './Playbook'
 import Review from './Review'
 import RichText from './RichText'
 import { askNonna, fetchReviewQueue, uploadContract } from './nonnaApi'
-import type { Message } from './nonnaApi'
+import type { Draft, Message } from './nonnaApi'
 import './App.css'
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [view, setView] = useState<'chat' | 'library' | 'review' | 'playbook'>('chat')
   const [pendingCount, setPendingCount] = useState<number | null>(null)
+  const [openDraft, setOpenDraft] = useState<Draft | null>(null) // a draft from chat, to open in the Library
   const [draft, setDraft] = useState('')
   const [waiting, setWaiting] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -156,7 +157,7 @@ export default function App() {
         </nav>
       </header>
 
-      {view === 'library' && <Library />}
+      {view === 'library' && <Library openDraft={openDraft} onDraftOpened={() => setOpenDraft(null)} />}
       {view === 'review' && <Review onDecided={refreshPendingCount} />}
       {view === 'playbook' && <Playbook />}
 
@@ -188,7 +189,16 @@ export default function App() {
   <RichText text={m.text} />
 </div>
                     {m.status && <p className="status">{m.status}</p>}
-                    {m.cards?.map((card, i) => <CardView key={i} card={card} />)}
+                    {m.cards?.map((card, i) => (
+                      <CardView
+                        key={i}
+                        card={card}
+                        onOpenDraft={(d) => {
+                          setOpenDraft(d)
+                          setView('library')
+                        }}
+                      />
+                    ))}
                     {m.intake && <IntakeCard proposal={m.intake} />}
                   </>
                 )}

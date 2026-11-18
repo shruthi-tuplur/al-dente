@@ -14,6 +14,7 @@ export type CardType =
   | 'deadlines'
   | 'amended'
   | 'playbook'
+  | 'draft'
 
 export interface Card {
   type: CardType

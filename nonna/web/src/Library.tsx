@@ -15,6 +15,7 @@ import type {
   LibraryClause,
   LibraryContract,
   LibrarySection,
+  Draft,
   PlaybookAssessment,
 } from './nonnaApi'
 
@@ -326,18 +327,31 @@ function ClausesTab({
   )
 }
 
-export default function Library() {
+export default function Library({
+  openDraft = null,
+  onDraftOpened,
+}: {
+  openDraft?: Draft | null // a draft from chat to open straight away
+  onDraftOpened?: () => void
+} = {}) {
+  const [incoming] = useState(openDraft)
   const [vendors, setVendors] = useState<CounterpartySummary[] | null>(null)
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(openDraft?.counterparty_id ?? null)
   const [library, setLibrary] = useState<CounterpartyLibrary | null>(null)
-  const [tab, setTab] = useState<'contracts' | 'clauses' | 'draft'>('contracts')
+  const [tab, setTab] = useState<'contracts' | 'clauses' | 'draft'>(openDraft ? 'draft' : 'contracts')
   const [error, setError] = useState('')
+
+  // The draft is handed over once, so coming back to the Library later starts fresh
+  useEffect(() => {
+    if (openDraft) onDraftOpened?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     fetchCounterparties()
       .then((list) => {
         setVendors(list)
-        if (list.length > 0) setSelectedId(list[0].id)
+        if (list.length > 0) setSelectedId((id) => id ?? list[0].id)
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Couldn't load your vendors."))
   }, [])
@@ -447,6 +461,7 @@ export default function Library() {
                   key={library.counterparty.id}
                   counterpartyId={library.counterparty.id}
                   vendorName={library.counterparty.name}
+                  initialDraft={incoming?.counterparty_id === library.counterparty.id ? incoming : null}
                 />
               </div>
             )}

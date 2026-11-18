@@ -1766,3 +1766,26 @@
   color: var(--basil);
   background: rgba(82, 94, 53, 0.12);
 }
+
+
+
+/* A draft started from chat */
+.draft-card {
+  display: grid;
+  gap: 10px;
+}
+
+.draft-card-notes {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--espresso-muted);
+}
+
+.draft-card-notes strong {
+  font-weight: 500;
+  color: var(--espresso);
+}
