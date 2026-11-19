@@ -16,6 +16,15 @@ export const CLAUSE_LABELS: Record<ClauseType, string> = {
   term_renewal: 'Term and renewal',
 }
 
+// What each term means, for someone who isn't a lawyer (hover hints and the one-pager)
+export const CLAUSE_MEANINGS: Record<ClauseType, string> = {
+  liability_cap: 'The most either side has to pay the other if something goes wrong',
+  payment_terms: 'How long we have to pay their invoices',
+  governing_law: "Which state's law applies if there's a dispute",
+  indemnification: "Who covers the other side's costs if someone else sues",
+  term_renewal: 'How long the agreement lasts, and whether it renews on its own',
+}
+
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
   NDA: 'NDA',
   MSA: 'MSA',
@@ -26,6 +35,13 @@ export const CONTRACT_TYPE_LABELS: Record<string, string> = {
 
 export function clauseLabel(type: string): string {
   return CLAUSE_LABELS[type as ClauseType] ?? type
+}
+
+// Today's date where you are (toISOString would give London's date, which is tomorrow after 4pm in California)
+export function todayISO(): string {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
 export function formatDate(iso: string): string {

@@ -529,3 +529,88 @@ export async function downloadDraft(draft: Draft): Promise<void> {
   link.click()
   URL.revokeObjectURL(url)
 }
+
+
+// ---------------------------------------------------------------------------
+// Google Calendar (optional)
+// ---------------------------------------------------------------------------
+
+export interface CalendarStatus {
+  configured: boolean // the Google client ID and secret are in .env
+  connected: boolean // someone has signed in with Google
+  calendar_name: string
+}
+
+export interface CalendarSyncResult {
+  calendar_name: string
+  created: number
+  updated: number
+  removed: number
+  unchanged: number
+  message: string
+}
+
+// Opened in a popup, so the chat stays put while you sign in with Google
+export const GOOGLE_CALENDAR_CONNECT_URL = '/api/google-calendar/connect'
+
+export async function fetchCalendarStatus(): Promise<CalendarStatus> {
+  const response = await fetch('/api/google-calendar/status')
+  if (!response.ok) throw new Error(await errorDetail(response, "Couldn't check Google Calendar."))
+  return (await response.json()) as CalendarStatus
+}
+
+export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
+  const response = await fetch('/api/google-calendar/sync', { method: 'POST' })
+  if (!response.ok) throw new Error(await errorDetail(response, "Couldn't sync Google Calendar."))
+  return (await response.json()) as CalendarSyncResult
+}
+
+export async function disconnectGoogleCalendar(): Promise<CalendarStatus> {
+  const response = await fetch('/api/google-calendar/disconnect', { method: 'POST' })
+  if (!response.ok) throw new Error(await errorDetail(response, "Couldn't disconnect Google Calendar."))
+  return (await response.json()) as CalendarStatus
+}
+
+
+
+// ---------------------------------------------------------------------------
+// Vendor one-pager
+// ---------------------------------------------------------------------------
+
+export interface OnePagerDeadline {
+  source: { id: number }
+  status: string
+  notice_deadline: string | null
+  term_end: string | null
+  action_date: string | null
+  summary: string
+}
+
+// One vendor's deadlines, worked out in code, for the one-pager's "next date to watch"
+export async function fetchVendorDeadlines(counterpartyId: number): Promise<{ rows: OnePagerDeadline[] }> {
+  const response = await fetch(`/api/deadlines?counterparty_id=${counterpartyId}`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Couldn't load deadlines."))
+  return (await response.json()) as { rows: OnePagerDeadline[] }
+}
+
+
+
+// ---------------------------------------------------------------------------
+// Explain a highlighted phrase
+// ---------------------------------------------------------------------------
+
+export interface Explanation {
+  phrase: string
+  explanation: string // plain English, written by Claude
+  definitions: { term: string; section: string | null; text: string }[] // word for word from the contract
+}
+
+export async function explainPhrase(phrase: string, context: string, contractId: number | null): Promise<Explanation> {
+  const response = await fetch('/api/explain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phrase, context, contract_id: contractId }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't explain that."))
+  return (await response.json()) as Explanation
+}

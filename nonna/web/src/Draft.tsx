@@ -50,7 +50,7 @@ function SectionText({ text }: { text: string }) {
     }
   }
   return (
-    <div className="draft-text">
+    <div className="draft-text" data-explain="">
       {blocks.map((block, i) =>
         Array.isArray(block) ? (
           <table key={i} className="draft-table">

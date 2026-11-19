@@ -1789,3 +1789,424 @@
   font-weight: 500;
   color: var(--espresso);
 }
+
+
+/* Google Calendar sync on the deadlines card */
+.deadline-google {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 4px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #efeae3;
+  border-radius: 10px;
+  background: #faf8f5;
+}
+
+.deadline-google-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--espresso-muted);
+}
+
+.deadline-google .intake-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+
+/* Breathing room under the deadlines note, and the calendar buttons */
+.deadline-asof {
+  margin-bottom: 14px;
+}
+
+.deadline-all {
+  margin-bottom: 12px;
+}
+
+
+/* One-time .ics download, shown when Google Calendar isn't connected */
+.deadline-download {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  margin: 4px 0 12px;
+}
+
+
+
+/* Vendor header with the one-pager button */
+.lib-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+/* The vendor one-pager: a letter-size page over the app, printed on its own */
+.one-pager-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow-y: auto;
+  padding: 24px 16px 48px;
+  background: rgba(43, 29, 20, 0.45);
+}
+
+.one-pager-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 8.5in;
+  margin: 0 auto 12px;
+}
+
+.one-pager-close {
+  background: #fff;
+}
+
+.one-pager {
+  box-sizing: border-box;
+  max-width: 8.5in;
+  min-height: 11in;
+  margin: 0 auto;
+  padding: 0.65in 0.7in;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 10px 40px rgba(43, 29, 20, 0.25);
+  color: var(--espresso);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.op-header {
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--nonna-red);
+}
+
+.op-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nonna-red);
+}
+
+.op-vendor {
+  margin: 2px 0 2px;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.op-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--espresso-muted);
+}
+
+.op-section {
+  margin-top: 20px;
+}
+
+.op-heading {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--espresso-muted);
+}
+
+.op-bullets {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+}
+
+.op-empty {
+  margin: 0;
+  color: var(--espresso-muted);
+}
+
+.op-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.op-table th,
+.op-table td {
+  padding: 8px 10px 8px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #efeae3;
+}
+
+.op-table thead th {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--espresso-muted);
+  border-bottom: 1px solid #d8d0c4;
+}
+
+.op-table tbody tr:last-child th,
+.op-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.op-table tbody th {
+  width: 36%;
+  font-weight: 400;
+}
+
+.op-term,
+.op-value {
+  display: block;
+  font-weight: 600;
+}
+
+.op-meaning,
+.op-from {
+  display: block;
+  font-size: 11.5px;
+  color: var(--espresso-muted);
+}
+
+.op-contracts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.op-contracts li {
+  display: grid;
+  grid-template-columns: 130px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.op-kind {
+  font-size: 11.5px;
+  color: var(--espresso-muted);
+}
+
+.op-footer {
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 1px solid #efeae3;
+  font-size: 11px;
+  color: var(--espresso-muted);
+}
+
+/* Printing while the one-pager is open prints just the page */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+
+  body.has-one-pager > *:not(.one-pager-overlay) {
+    display: none !important;
+  }
+
+  html,
+  body.has-one-pager {
+    height: auto;
+    background: #fff !important;
+  }
+
+  body.has-one-pager .one-pager-overlay {
+    position: static;
+    overflow: visible;
+    padding: 0;
+    background: none;
+  }
+
+  body.has-one-pager .one-pager-toolbar {
+    display: none;
+  }
+
+  body.has-one-pager .one-pager {
+    max-width: none;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .one-pager .badge {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+
+/* Plain-English hints on term names (hover, tap, or keyboard focus) */
+.term-hint {
+  position: relative;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-decoration-color: #c9bfb2;
+  text-underline-offset: 3px;
+}
+
+.term-hint:focus-visible {
+  outline: 2px solid var(--saffron);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.term-hint-bubble {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: 240px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--espresso);
+  color: #faf8f5;
+  font-size: 12.5px;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
+  box-shadow: 0 6px 18px rgba(43, 29, 20, 0.2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s;
+  pointer-events: none;
+}
+
+.term-hint:hover .term-hint-bubble,
+.term-hint:focus .term-hint-bubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Near the right edge, open the hint leftward so it isn't cut off */
+.playbook-table th:last-child .term-hint-bubble,
+.playbook-table th:nth-last-child(2) .term-hint-bubble {
+  left: auto;
+  right: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .term-hint-bubble {
+    transition: none;
+  }
+}
+
+
+/* Highlight contract text, then "Ask Nonna to explain" */
+.explain-button {
+  position: fixed;
+  z-index: 60;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--espresso);
+  color: #faf8f5;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(43, 29, 20, 0.25);
+}
+
+.explain-button:hover {
+  background: var(--nonna-red);
+}
+
+.explain-panel {
+  position: fixed;
+  z-index: 60;
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #efeae3;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(43, 29, 20, 0.22);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--espresso);
+}
+
+.explain-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.explain-phrase {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--espresso);
+}
+
+.explain-close {
+  border: none;
+  background: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--espresso-muted);
+  cursor: pointer;
+}
+
+.explain-text {
+  margin: 0;
+}
+
+.explain-definition {
+  display: grid;
+  gap: 4px;
+}
+
+.explain-definition-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--espresso-muted);
+}
+
+.explain-definition blockquote {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--saffron);
+  border-radius: 4px;
+  background: #faf8f5;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.explain-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--espresso-muted);
+}

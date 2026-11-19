@@ -5,6 +5,7 @@ import type { FormEvent } from 'react'
 import { formatDate } from './format'
 import { CURRENT_USER, fetchPlaybook, updatePlaybookRule } from './nonnaApi'
 import type { PlaybookAssessment, PlaybookCheck, PlaybookRule, Tier } from './nonnaApi'
+import TermLabel from './TermLabel'
 
 export const TIER_LABELS: Record<Tier, string> = {
   standard: 'Standard',
@@ -102,7 +103,7 @@ export function PlaybookMatrix({ data }: { data: PlaybookCheck }) {
               <th scope="col">Vendor</th>
               {columns.map((rule) => (
                 <th key={rule.clause_type} scope="col">
-                  {rule.label}
+                  <TermLabel type={rule.clause_type}>{rule.label}</TermLabel>
                 </th>
               ))}
             </tr>
@@ -143,7 +144,9 @@ export function PlaybookMatrix({ data }: { data: PlaybookCheck }) {
                 <div className="playbook-flag-head">
                   <PlaybookBadge assessment={cell} />
                   <span className="playbook-flag-vendor">{vendor}</span>
-                  <span className="playbook-flag-term">{rule.label}</span>
+                  <span className="playbook-flag-term">
+                    <TermLabel type={rule.clause_type}>{rule.label}</TermLabel>
+                  </span>
                 </div>
                 <p className="playbook-flag-reason">{cell.reason}</p>
                 <p className="playbook-flag-source">
@@ -266,7 +269,9 @@ function RuleCard({ rule, onSaved }: { rule: PlaybookRule; onSaved: () => void }
 
   return (
     <li className="playbook-rule">
-      <p className="playbook-rule-title">{rule.label}</p>
+      <p className="playbook-rule-title">
+        <TermLabel type={rule.clause_type}>{rule.label}</TermLabel>
+      </p>
       <dl className="playbook-rule-tiers">
         <div>
           <dt>

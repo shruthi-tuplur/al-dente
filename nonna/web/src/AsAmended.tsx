@@ -24,7 +24,9 @@ export function AmendedSectionView({ section }: { section: AmendedSection }) {
       {section.status === 'deleted' ? (
         <p className="amended-gone">Section {section.number} was deleted.</p>
       ) : (
-        <div className="amended-text">{tidyClauseText(section.text)}</div>
+        <div className="amended-text" data-explain="">
+          {tidyClauseText(section.text)}
+        </div>
       )}
       {section.original_text && (
         <details className="lib-wording">

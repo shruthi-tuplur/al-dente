@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import ClauseBlock from './ClauseBlock'
 import CorrectionForm, { canCorrect } from './CorrectionForm'
-import { CLAUSE_LABELS, clauseLabel, describeTerms, formatDate } from './format'
+import { CLAUSE_LABELS, describeTerms, formatDate } from './format'
 import type { ClauseType } from './format'
 import FullContract from './FullContract'
+import OnePager from './OnePager'
 import { PlaybookNote } from './Playbook'
+import TermLabel from './TermLabel'
 import AsAmended from './AsAmended'
 import DraftTab from './Draft'
 import { fetchCounterparties, fetchLibrary } from './nonnaApi'
@@ -50,13 +53,15 @@ function statusBadge(clause: LibraryClause, status: Status) {
 
 function ClauseRow({
   clause,
+  contractId,
   agreed,
   title,
   onChanged,
 }: {
   clause: LibraryClause
+  contractId: number
   agreed: Status
-  title: string
+    title: ReactNode
   onChanged: () => void
 }) {
   const [fixing, setFixing] = useState(false)
@@ -81,7 +86,7 @@ function ClauseRow({
       {clause.full_text && (
         <details className="lib-wording">
           <summary>Show exact wording</summary>
-          <ClauseBlock text={clause.full_text} />
+          <ClauseBlock text={clause.full_text} contractId={contractId} />
         </details>
       )}
       {saved && <p className="review-done">✓ {saved}</p>}
@@ -165,8 +170,9 @@ function ContractsTab({
                       <ClauseRow
                         key={clause.id}
                         clause={clause}
+                        contractId={contract.id}
                         agreed={agreed}
-                        title={clauseLabel(clause.clause_type)}
+                        title={<TermLabel type={clause.clause_type} />}
                         onChanged={onChanged}
                       />
                     ))}
@@ -208,7 +214,9 @@ function TrackedCategory({
   return (
     <details className="lib-category">
       <summary>
-        <span className="lib-category-title">{CLAUSE_LABELS[type]}</span>
+        <span className="lib-category-title">
+          <TermLabel type={type}>{CLAUSE_LABELS[type]}</TermLabel>
+        </span>
         <span className="card-meta">{meta}</span>
       </summary>
       {versions.length === 0 ? (
@@ -219,6 +227,7 @@ function TrackedCategory({
             <ClauseRow
               key={clause.id}
               clause={clause}
+              contractId={contract.id}
               agreed={agreed}
               title={`${contract.title} · ${formatDate(contract.effective_date)}`}
               onChanged={onChanged}
@@ -262,7 +271,7 @@ function CatalogCategory({
                 {section.section_number ? `§${section.section_number}` : 'No section number'}
                 {section.heading ? ` · ${section.heading}` : ''}
               </p>
-              <ClauseBlock text={section.full_text} />
+              <ClauseBlock text={section.full_text} contractId={section.contract_id} />
             </li>
           )
         })}
@@ -340,6 +349,7 @@ export default function Library({
   const [library, setLibrary] = useState<CounterpartyLibrary | null>(null)
   const [tab, setTab] = useState<'contracts' | 'clauses' | 'draft'>(openDraft ? 'draft' : 'contracts')
   const [error, setError] = useState('')
+  const [showOnePager, setShowOnePager] = useState(false)
 
   // The draft is handed over once, so coming back to the Library later starts fresh
   useEffect(() => {
@@ -414,11 +424,19 @@ export default function Library({
         {selectedId !== null && library === null && !error && <p className="thinking">Loading…</p>}
         {library && (
           <>
-            <p className="card-title lib-title">{library.counterparty.name}</p>
-            <p className="card-subtitle">
-              {library.contracts.length} {library.contracts.length === 1 ? 'contract' : 'contracts'} ·{' '}
-              {library.counterparty.entities.map((e) => e.legal_name).join(', ')}
-            </p>
+            <div className="lib-header">
+              <div>
+                <p className="card-title lib-title">{library.counterparty.name}</p>
+                <p className="card-subtitle">
+                  {library.contracts.length} {library.contracts.length === 1 ? 'contract' : 'contracts'} ·{' '}
+                  {library.counterparty.entities.map((e) => e.legal_name).join(', ')}
+                </p>
+              </div>
+              <button type="button" className="btn btn-sm btn-quiet" onClick={() => setShowOnePager(true)}>
+                One-pager
+              </button>
+            </div>
+            {showOnePager && <OnePager library={library} onClose={() => setShowOnePager(false)} />}
 
             <div className="lib-tabs" role="tablist">
               <button

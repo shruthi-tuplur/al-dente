@@ -142,6 +142,25 @@ Formal evals are in progress. What's been tested by hand so far:
 - **No login yet.** There's one demo user, so this isn't ready for a real team without authentication and access controls.
 - **Can't add a clause Nonna missed.** Corrections fix values that were found. Adding a clause extraction missed entirely isn't built yet.
 
+
+### Calendar reminders for deadlines
+
+Nonna works out each contract's renewal and notice dates in code. There are two ways to get them onto a calendar.
+
+**Google Calendar sync (optional).** Connect once from the deadlines card and Nonna keeps her own "Nonna deadlines" calendar up to date: one event per contract on the date someone needs to act, with reminders 4 weeks, 1 week, and 1 day before. When an attorney approves or corrects a term, the event moves on its own. Sync never duplicates events, removes deadlines that have passed, and recreates any that get deleted.
+
+- **Least access:** Nonna asks only for Google's `calendar.app.created` permission, so she can manage the calendar she creates and can't see anything else in your Google Calendar.
+- **Data minimization:** events hold the vendor, contract title, date, and a plain-English summary. Never clause text.
+- **Never blocks a review:** if Google has a problem, the attorney's decision still saves.
+- The sign-in token is stored in `storage/`, which is gitignored and readable only by you.
+
+**Calendar file download (no integration).** Without Google connected, the deadlines card offers a standard `.ics` file that Outlook, Apple Calendar, and Google Calendar can all open. It's labeled as a one-time file, since it won't update if a date changes. It's hidden while Google sync is on, so nobody adds the same deadline twice.
+
+**Why there's no Outlook sync.** Microsoft Graph has no permission limited to calendars an app creates. Adding a calendar requires `Calendars.ReadWrite`, which Microsoft describes to users as full access to their calendars. For a tool that handles legal deadlines, asking for access to every meeting on an attorney's calendar isn't worth a few reminders, and most firms would need IT approval anyway. Outlook users get the `.ics` download instead, which works with no approvals.
+
+**Setup:** see the Google Cloud steps in `docs/google-calendar.md`, or add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `.env`. Without them, the Google option simply doesn't appear.
+
+
 ## Later
 
 - Drafting a new SOW from a vendor's history, with each clause labeled verbatim, adapted, or new

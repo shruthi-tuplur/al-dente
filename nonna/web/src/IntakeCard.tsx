@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useBulkReview } from './bulkReview'
 import { clauseLabel, describeTerms } from './format'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
+import TermLabel from './TermLabel'
 import { CURRENT_USER, extractContract, saveContract } from './nonnaApi'
 import type {
   ContractType,
@@ -354,7 +355,9 @@ export default function IntakeCard({ proposal }: { proposal: IntakeProposal }) {
                   return (
                     <li key={clause.clause_type}>
                       <div className="extracted-row">
-                        <span className="extracted-label">{clauseLabel(clause.clause_type)}</span>
+                        <span className="extracted-label">
+                          <TermLabel type={clause.clause_type} />
+                        </span>
                         <span className="extracted-value">
                           {clause.status === 'found' && (value ?? 'Found, no value pulled')}
                           {clause.status === 'redacted' && 'Redacted'}

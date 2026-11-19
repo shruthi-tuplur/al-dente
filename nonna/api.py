@@ -11,13 +11,16 @@ from typing import Annotated
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
-from nonna import amendments, chat, deadlines, drafting, extraction, intake, lookups, playbook, reviews, sections
+from nonna import (
+    amendments, chat, deadlines, drafting, explain, extraction, google_calendar, intake, lookups, playbook, reviews,
+    sections,
+)
 from nonna.database import get_session
-from nonna.models import Contract
+from nonna.models import Clause, Contract
 from nonna.models import (
     Clause,
     Contract,
@@ -280,13 +283,19 @@ def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> revi
     returns 409 unless it's approved as an intentional change with a note.
     """
     try:
-        return reviews.review_clause(session, clause_id, review)
+        outcome = reviews.review_clause(session, clause_id, review)
     except reviews.NotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except reviews.BaselineConflict as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     except reviews.ReviewRejected as error:
         raise HTTPException(422, str(error)) from error
+
+    # A reviewed term can move a renewal date, so keep Google Calendar in step (if it's connected)
+    clause = session.get(Clause, clause_id)
+    if clause is not None and clause.clause_type == "term_renewal":
+        google_calendar.sync_quietly(session)
+    return outcome
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -439,3 +448,62 @@ def download_draft(draft: drafting.Draft) -> Response:
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar (optional)
+# ---------------------------------------------------------------------------
+
+@app.get("/google-calendar/status", response_model=google_calendar.CalendarStatus)
+def calendar_status() -> google_calendar.CalendarStatus:
+    return google_calendar.status()
+
+
+@app.get("/google-calendar/connect")
+def calendar_connect() -> RedirectResponse:
+    """Opened in a popup: sends the browser to Google to sign in."""
+    try:
+        return RedirectResponse(google_calendar.sign_in_url())
+    except google_calendar.CalendarUnavailable as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+
+
+@app.get("/google-calendar/callback", response_class=HTMLResponse)
+def calendar_callback(state: str = "", code: str = "", error: str = "") -> HTMLResponse:
+    """Google sends the popup back here. Nonna saves the sign-in and the popup closes itself."""
+    if error or not code:
+        return HTMLResponse(google_calendar.sign_in_page(False, "Google Calendar wasn't connected. You can close this window."))
+    try:
+        google_calendar.finish_sign_in(state, code)
+    except Exception as problem:  # noqa: BLE001 - show the reason in the popup instead of a stack trace
+        message = str(problem) if isinstance(problem, google_calendar.CalendarUnavailable) else "Google sign-in didn't work. Close this window and try again."
+        return HTMLResponse(google_calendar.sign_in_page(False, message))
+    return HTMLResponse(google_calendar.sign_in_page(True, "Google Calendar is connected to Nonna. This window will close."))
+
+
+@app.post("/google-calendar/sync", response_model=google_calendar.SyncResult)
+def calendar_sync(session: SessionDep) -> google_calendar.SyncResult:
+    try:
+        return google_calendar.sync(session)
+    except google_calendar.CalendarUnavailable as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+
+
+@app.post("/google-calendar/disconnect", response_model=google_calendar.CalendarStatus)
+def calendar_disconnect() -> google_calendar.CalendarStatus:
+    """Forget the Google sign-in. The Nonna deadlines calendar stays in Google until you delete it."""
+    google_calendar.disconnect()
+    return google_calendar.status()
+
+
+
+
+@app.post("/explain", response_model=explain.Explanation)
+def explain_phrase(request: explain.ExplainIn, session: SessionDep) -> explain.Explanation:
+    """Explain a highlighted phrase in plain English, with the contract's own definitions quoted."""
+    try:
+        return explain.explain(session, request)
+    except explain.ExplainUnavailable as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error

@@ -7,6 +7,7 @@ import { fetchReviewQueue } from './nonnaApi'
 import type { LibraryClause, QueueItem } from './nonnaApi'
 import { PlaybookNote } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
+import TermLabel from './TermLabel'
 
 function valueOf(clause: LibraryClause): string {
   if (clause.presence === 'absent') return 'Not in this contract'
@@ -52,7 +53,9 @@ function ContractGroup({ items, onDecided }: { items: QueueItem[]; onDecided: ()
         {items.map((item) => (
           <li key={item.clause.id} className="review-item">
             <div className="card-row">
-              <span className="card-label">{clauseLabel(item.clause.clause_type)}</span>
+              <span className="card-label">
+                <TermLabel type={item.clause.clause_type} />
+              </span>
               <span className="card-value">{valueOf(item.clause)}</span>
             </div>
             <Comparison item={item} />
@@ -72,7 +75,7 @@ function ContractGroup({ items, onDecided }: { items: QueueItem[]; onDecided: ()
             {item.clause.full_text && (
               <details className="lib-wording">
                 <summary>Show exact wording</summary>
-                <ClauseBlock text={item.clause.full_text} />
+                <ClauseBlock text={item.clause.full_text} contractId={item.source.id} />
               </details>
             )}
             <ReviewControls

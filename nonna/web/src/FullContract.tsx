@@ -37,7 +37,13 @@ export default function FullContract({ contractId }: { contractId: number }) {
           {error && <p className="intake-error">⚠ {error}</p>}
           {!error && contract === null && <p className="thinking">Loading…</p>}
           {contract && (
-            <div className="full-contract-text" tabIndex={0} aria-label={`Full text of ${contract.title}`}>
+            <div
+              className="full-contract-text"
+              tabIndex={0}
+              aria-label={`Full text of ${contract.title}`}
+              data-explain=""
+              data-contract-id={contractId}
+            >
               {contract.full_text ? tidyClauseText(contract.full_text) : 'No text on file for this contract.'}
             </div>
           )}

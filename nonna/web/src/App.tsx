@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import CardView from './CardView'
+import ExplainSelection from './ExplainSelection'
 import IntakeCard from './IntakeCard'
 import Library from './Library'
 import Playbook from './Playbook'
@@ -185,7 +186,7 @@ export default function App() {
                   <p className="thinking">Thinking…</p>
                 ) : (
                   <>
-                    <div className="nonna-text">
+                    <div className="nonna-text" data-explain="">
   <RichText text={m.text} />
 </div>
                     {m.status && <p className="status">{m.status}</p>}
@@ -251,6 +252,8 @@ export default function App() {
           </button>
         </form>
       </div>
+
+      <ExplainSelection />
     </div>
   )
 }

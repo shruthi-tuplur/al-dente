@@ -1,16 +1,19 @@
 // The cards that show up under Nonna's replies. Every value here comes straight
 // from the database through the API, never from the LLM's own words.
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useBulkReview } from './bulkReview'
 import { AmendedSectionView, Unresolved } from './AsAmended'
+import { canAddToCalendar, downloadCalendar } from './calendar'
 import ClauseBlock from './ClauseBlock'
 import { canCorrect } from './CorrectionForm'
 import { DraftSummaryCard } from './Draft'
+import GoogleCalendarBar from './GoogleCalendar'
 import { PlaybookMatrix } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
+import TermLabel from './TermLabel'
 import {
   CONTRACT_TYPE_LABELS,
-  clauseLabel,
   describeTerms,
   formatDate,
 } from './format'
@@ -106,7 +109,9 @@ function TermRows({ positions }: { positions: Position[] }) {
       {positions.map((p) => (
         <li key={p.id}>
           <div className="card-row">
-            <span className="card-label">{clauseLabel(p.clause_type)}</span>
+            <span className="card-label">
+              <TermLabel type={p.clause_type} />
+            </span>
             <span className="card-value">{clauseValue(p.clause)}</span>
           </div>
           <span className="quote">{sourceLine(p.source, p.clause)}</span>
@@ -241,7 +246,7 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
               {item.applies_to ? ` · applies to ${item.applies_to.join(', ')}` : ''}
             </span>
             {item.clause.full_text ? (
-              <ClauseBlock text={item.clause.full_text} />
+              <ClauseBlock text={item.clause.full_text} contractId={item.source.id} />
             ) : (
               <p className="card-empty">{clauseValue(item.clause)}</p>
             )}
@@ -278,7 +283,7 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
               {formatDate(item.source.effective_date)}
               {item.section.heading ? ` · ${item.section.heading}` : ''}
             </span>
-            <ClauseBlock text={item.section.full_text} />
+            <ClauseBlock text={item.section.full_text} contractId={item.source.id} />
           </li>
         ))}
       </ul>
@@ -405,13 +410,34 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
       { label: 'Term waiting for review', names: data.needs_review },
       { label: 'No term on file', names: data.no_term_on_file },
     ].filter((n) => n.names.length > 0)
-  
+    const upcoming = data.rows.filter(canAddToCalendar)
+    // When Google Calendar is syncing, the one-time .ics files would only make duplicates
+    const [googleConnected, setGoogleConnected] = useState(false)
+    const showDownloads = upcoming.length > 0 && !googleConnected
+
     return (
       <>
-        <p className="card-subtitle">
+        <p className="card-subtitle deadline-asof">
           As of {formatDate(data.as_of)} · Estimated from each contract's reviewed term, so confirm against the
           contract before acting
         </p>
+        {upcoming.length > 0 && <GoogleCalendarBar onConnectedChange={setGoogleConnected} />}
+        {showDownloads && (
+          <div className="deadline-download">
+            <button
+              type="button"
+              className="btn btn-sm btn-quiet"
+              onClick={() => downloadCalendar(upcoming, 'nonna-deadlines.ics')}
+            >
+              {upcoming.length === 1
+                ? 'Download for Outlook or Apple Calendar'
+                : `Download all ${upcoming.length} for Outlook or Apple Calendar`}
+            </button>
+            <p className="deadline-google-note">
+              A one-time calendar file (.ics) that any calendar app can open. If a date changes, download it again.
+            </p>
+          </div>
+        )}
         {data.rows.length === 0 ? (
           <p className="card-empty">
             {data.within_days ? `Nothing due in the next ${data.within_days} days.` : 'No deadlines on file.'}
@@ -435,6 +461,20 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
                     {row.term_source.id !== row.source.id ? ` · term from ${row.term_source.title}` : ''}
                   </span>
                   <p className="deadline-summary">{row.summary}</p>
+                  {showDownloads && canAddToCalendar(row) && (
+                    <button
+                      type="button"
+                      className="lib-fix"
+                      onClick={() =>
+                        downloadCalendar(
+                          [row],
+                          `nonna-${row.counterparty_name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-deadline.ics`,
+                        )
+                      }
+                    >
+                      Download .ics
+                    </button>
+                  )}
                 </li>
               )
             })}
@@ -452,7 +492,6 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
       </>
     )
   }
-
 // What a contract's amendments changed. The amendments were applied in code, not by the model.
 function AmendedCard({ data }: { data: AmendedContract }) {
     const changed = data.sections.filter((s) => s.status !== 'original').length
@@ -487,7 +526,7 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
             <li key={item.clause.id}>
               <div className="card-row">
                 <span className="card-label">
-                  {clauseLabel(item.clause.clause_type)} · {item.counterparty_name}
+                  <TermLabel type={item.clause.clause_type} /> · {item.counterparty_name}
                 </span>
                 <span className="card-value">{clauseValue(item.clause)}</span>
               </div>
@@ -553,7 +592,7 @@ export default function CardView({ card, onOpenDraft }: { card: Card; onOpenDraf
   }
 
   return (
-    <section className="nonna-card" aria-label={card.title}>
+    <section className="nonna-card" aria-label={card.title} data-explain="">
       {card.type !== 'profile' && <p className="card-title">{card.title}</p>}
       {body}
     </section>
