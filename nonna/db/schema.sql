@@ -12,6 +12,7 @@ BEGIN;
 -- Hide "does not exist, skipping" notices on a fresh database
 SET LOCAL client_min_messages TO warning;
 
+DROP TABLE IF EXISTS precedence_decisions CASCADE;
 DROP TABLE IF EXISTS playbook_exceptions CASCADE;
 DROP TABLE IF EXISTS playbook_rules CASCADE;
 DROP TABLE IF EXISTS contract_sections CASCADE;
@@ -26,6 +27,7 @@ DROP TABLE IF EXISTS counterparties CASCADE;
 DROP FUNCTION IF EXISTS prevent_review_decision_changes() CASCADE;
 DROP FUNCTION IF EXISTS check_position_baseline() CASCADE;
 DROP FUNCTION IF EXISTS protect_playbook_exceptions() CASCADE;
+DROP FUNCTION IF EXISTS prevent_precedence_decision_changes() CASCADE;
 
 
 -- ---------------------------------------------------------------------------
@@ -338,5 +340,31 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER playbook_exceptions_permanent
     BEFORE UPDATE OR DELETE ON playbook_exceptions
     FOR EACH ROW EXECUTE FUNCTION protect_playbook_exceptions();
+
+
+-- Which term controls: the attorney's call when an SOW and its MSA disagree. Append-only.
+CREATE TABLE precedence_decisions (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    sow_clause_id  BIGINT NOT NULL REFERENCES clauses (id),   -- the SOW's (or change order's) term
+    msa_clause_id  BIGINT NOT NULL REFERENCES clauses (id),   -- the MSA term it conflicts with
+    controls       TEXT NOT NULL CHECK (controls IN ('msa', 'sow')),
+    sow_value      TEXT NOT NULL,   -- the two values this call was made for, like "Net 60"
+    msa_value      TEXT NOT NULL,
+    note           TEXT NOT NULL CHECK (btrim(note) <> ''),   -- why, in the attorney's words
+    decided_by     TEXT NOT NULL,
+    decided_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX precedence_decisions_sow_clause_idx ON precedence_decisions (sow_clause_id);
+
+CREATE FUNCTION prevent_precedence_decision_changes() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION 'precedence_decisions is append-only. Add a new call instead of changing an old one.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER precedence_decisions_append_only
+    BEFORE UPDATE OR DELETE ON precedence_decisions
+    FOR EACH ROW EXECUTE FUNCTION prevent_precedence_decision_changes();
 
 COMMIT;

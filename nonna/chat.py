@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import amendments, deadlines, drafting, lookups, playbook
+from nonna import amendments, deadlines, drafting, lookups, playbook, precedence
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
@@ -59,6 +59,14 @@ get_section_text to pull the wording. These are not reviewed and have no agreed 
 say "here's what the contract says", never "this is what was agreed". If several contracts \
 have the clause, mention which ones and their dates, and don't decide which one controls.
 - If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts.
+- For "which term controls?", or when an SOW and the MSA disagree on a key term ("SOW 2 says \
+net 60 but the MSA says net 45"), use check_precedence. It lines up both terms, the MSA's \
+order-of-precedence clause, and whether the SOW names the MSA section and says it supersedes \
+it, all checked in code. Never decide which term controls yourself, not even as a guess or a \
+"likely": that's the attorney's call. Report the pieces in a few bullets. If an attorney \
+already made a call (the "call" field), say which term they said controls, who, and why. If \
+not, say it's waiting for an attorney's call in the Library. The card shows the precedence \
+clause, so don't retype it.
 - Do not give legal advice or your own opinion about whether a term is good. Report what was \
 agreed. The one yardstick you can use is Aurelia's playbook, the company's own standard positions.
 - Never write contract language yourself: no clauses, SOW sections, or amendment wording, not \
@@ -339,6 +347,21 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "check_precedence",
+        "description": (
+            "Which term controls when a vendor's SOW (or change order) says something different "
+            "from its MSA on payment terms, liability cap, governing law, or indemnification. "
+            "Returns each conflict with both terms, the MSA's order-of-precedence clause, whether "
+            "the SOW names the MSA section and says it supersedes it, and the attorney's call if "
+            "one was made. Checked in code; it never decides which term controls."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"counterparty_id": {"type": "integer"}},
+            "required": ["counterparty_id"],
+        },
+    },
+    {
         "name": "get_review_queue",
         "description": (
             "Extracted clauses waiting for an attorney to review. Leave out counterparty_id "
@@ -365,6 +388,7 @@ STATUS_FOR_TOOL = {
     "get_deadlines": "Checked the calendar",
     "get_contract_as_amended": "Read it with the amendments applied",
     "check_playbook": "Checked against our playbook",
+    "check_precedence": "Lined up the SOW and the MSA",
     "draft_sow": "Drafted from what you've agreed",
 }
 
@@ -531,6 +555,12 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         names = [r["counterparty_name"] for r in data["rows"]]
         title = f"{names[0]} vs our playbook" if tool_input.get("counterparty_id") and names else "Vendors vs our playbook"
         _add_card(cards, Card(type="playbook", title=title, data=data))
+        return data
+
+    if name == "check_precedence":
+        report = precedence.get_conflicts(session, tool_input["counterparty_id"])
+        data = report.model_dump(mode="json")
+        _add_card(cards, Card(type="precedence", title=f"Which term controls: {report.counterparty_name}", data=data))
         return data
 
     if name == "get_review_queue":

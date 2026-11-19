@@ -17,7 +17,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
 from nonna import (
     amendments, chat, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar, intake, lookups,
-    playbook, reviews, sections,
+    playbook, precedence, reviews, sections,
 )
 from nonna.database import get_session
 from nonna.models import Clause, Contract
@@ -420,6 +420,29 @@ def get_playbook(session: SessionDep, counterparty_id: int | None = None) -> pla
     """Aurelia's playbook, and how every vendor's agreed terms measure up against it."""
     return playbook.check_vendors(session, counterparty_id)
 
+
+@app.get("/counterparties/{counterparty_id}/precedence", response_model=precedence.PrecedenceReport)
+def get_precedence(counterparty_id: int, session: SessionDep) -> precedence.PrecedenceReport:
+    """Where a vendor's SOWs say something different from the MSA, with the pieces to decide which controls."""
+    try:
+        return precedence.get_conflicts(session, counterparty_id)
+    except precedence.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+
+
+@app.post(
+    "/clauses/{clause_id}/precedence-call",
+    response_model=precedence.ControlCall,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_precedence_call(clause_id: int, call: precedence.CallIn, session: SessionDep) -> precedence.ControlCall:
+    """Save the attorney's call on which term controls for one SOW term. Append-only."""
+    try:
+        return precedence.record_call(session, clause_id, call)
+    except precedence.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except precedence.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
 
 @app.post(
     "/clauses/{clause_id}/playbook-exception",

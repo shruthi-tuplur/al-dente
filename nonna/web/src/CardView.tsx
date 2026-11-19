@@ -11,6 +11,7 @@ import { DraftSummaryCard } from './Draft'
 import GoogleCalendarBar from './GoogleCalendar'
 import { PlaybookMatrix, PlaybookNote } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
+import { PrecedenceList } from './TermControls'
 import TermLabel from './TermLabel'
 import {
   CONTRACT_TYPE_LABELS,
@@ -18,7 +19,7 @@ import {
   formatDate,
 } from './format'
 import type { Term } from './format'
-import type { AmendedContract, Card, Draft, PlaybookCheck } from './nonnaApi'
+import type { AmendedContract, Card, Draft, PlaybookCheck, PrecedenceReport } from './nonnaApi'
 
 interface Source {
   id: number

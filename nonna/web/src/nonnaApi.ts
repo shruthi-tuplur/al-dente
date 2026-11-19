@@ -15,6 +15,7 @@ export type CardType =
   | 'amended'
   | 'playbook'
   | 'draft'
+  | 'precedence'
 
 export interface Card {
   type: CardType
@@ -521,6 +522,79 @@ export async function withdrawPlaybookException(exceptionId: number, note: strin
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't withdraw that exception."))
 }
 
+
+// ---------------------------------------------------------------------------
+// Which term controls (an SOW and its MSA disagree)
+// ---------------------------------------------------------------------------
+
+export interface TermSide {
+  clause_id: number
+  value: string
+  section_number: string | null
+  source: ContractRef
+  amended_by: ContractRef | null // an amendment changed the MSA's term
+  review_status: string
+}
+
+export interface PrecedenceRule {
+  section_number: string
+  heading: string
+  text: string // word for word, as amended
+  source: ContractRef
+  amended: boolean
+}
+
+export interface SupersedeCheck {
+  msa_section: string | null
+  names_section: boolean
+  says_supersedes: boolean
+  quote: string | null // the SOW's own sentence
+  quote_source: string | null // like "SOW No. 1 §5.3"
+}
+
+export type Controls = 'msa' | 'sow'
+
+export interface ControlCall {
+  id: number
+  controls: Controls
+  note: string
+  decided_by: string
+  decided_at: string
+}
+
+export interface TermConflict {
+  clause_type: string
+  label: string
+  msa: TermSide
+  sow: TermSide
+  rule: PrecedenceRule | null
+  check: SupersedeCheck
+  call: ControlCall | null
+}
+
+export interface PrecedenceReport {
+  counterparty_id: number
+  counterparty_name: string
+  conflicts: TermConflict[]
+  open_count: number // no attorney call yet
+}
+
+export async function fetchPrecedence(counterpartyId: number): Promise<PrecedenceReport> {
+  const response = await fetch(`/api/counterparties/${counterpartyId}/precedence`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't line up the SOWs and the MSA."))
+  return (await response.json()) as PrecedenceReport
+}
+
+// The attorney's call on which term controls. Append-only: a new call replaces the old one in effect.
+export async function recordPrecedenceCall(sowClauseId: number, controls: Controls, note: string): Promise<ControlCall> {
+  const response = await fetch(`/api/clauses/${sowClauseId}/precedence-call`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ controls, note, decided_by: CURRENT_USER }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't save that call."))
+  return (await response.json()) as ControlCall
+}
 
 // ---------------------------------------------------------------------------
 // Drafting from history

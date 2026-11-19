@@ -299,3 +299,27 @@ class PlaybookException(Base):
     def __repr__(self) -> str:
         state = "active" if self.withdrawn_at is None else "withdrawn"
         return f"<PlaybookException on clause {self.clause_id} ({state})>"
+
+
+    
+
+class PrecedenceDecision(Base):
+    """The attorney's call on which term controls when an SOW and its MSA disagree.
+
+    Append-only: a trigger blocks edits and deletes. The latest call for an SOW term counts.
+    """
+
+    __tablename__ = "precedence_decisions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    sow_clause_id: Mapped[int] = mapped_column(ForeignKey("clauses.id"))
+    msa_clause_id: Mapped[int] = mapped_column(ForeignKey("clauses.id"))
+    controls: Mapped[str] = mapped_column(Text)  # "msa" or "sow"
+    sow_value: Mapped[str] = mapped_column(Text)  # the two values this call was made for
+    msa_value: Mapped[str] = mapped_column(Text)
+    note: Mapped[str] = mapped_column(Text)
+    decided_by: Mapped[str] = mapped_column(Text)
+    decided_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, server_default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<PrecedenceDecision {self.controls} controls for clause {self.sow_clause_id}>"

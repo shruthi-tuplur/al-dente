@@ -8,6 +8,7 @@ import FullContract from './FullContract'
 import OnePager from './OnePager'
 import { PlaybookNote } from './Playbook'
 import TermLabel from './TermLabel'
+import WhichTermControls from './TermControls'
 import AsAmended from './AsAmended'
 import DraftTab from './Draft'
 import { fetchCounterparties, fetchLibrary } from './nonnaApi'
@@ -437,6 +438,7 @@ export default function Library({
               </button>
             </div>
             {showOnePager && <OnePager library={library} onClose={() => setShowOnePager(false)} />}
+            <WhichTermControls counterpartyId={library.counterparty.id} reloadKey={library} />
 
             <div className="lib-tabs" role="tablist">
               <button
