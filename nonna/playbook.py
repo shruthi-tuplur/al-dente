@@ -21,9 +21,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from nonna.models import Clause, Contract, Counterparty, CounterpartyPosition, PlaybookRule
+from nonna.models import Clause, Contract, Counterparty, CounterpartyPosition, PlaybookException, PlaybookRule
 from nonna.schemas import PlaybookAssessment as Assessment
-from nonna.schemas import SourceContract
+from nonna.schemas import PlaybookExceptionOut, SourceContract
 
 CLAUSE_TYPES = ["liability_cap", "payment_terms", "governing_law", "indemnification", "term_renewal"]
 LABELS = {
@@ -68,6 +68,7 @@ class RuleIn(BaseModel):
 
 class Cell(Assessment):
     source: SourceContract
+    clause_id: int  # the agreed clause this cell is about
 
 
 class PlaybookRow(BaseModel):
@@ -79,7 +80,8 @@ class PlaybookRow(BaseModel):
 class PlaybookCheck(BaseModel):
     rules: list[RuleOut]
     rows: list[PlaybookRow]
-    outside_count: int
+    outside_count: int  # off playbook with no GC exception
+    exception_count: int  # off playbook, but the GC signed off
 
 
 class RuleRejected(Exception):
@@ -359,7 +361,32 @@ def update_rule(session: Session, clause_type: str, change: RuleIn) -> RuleOut:
     return to_rule(rule, _versions(session).get(clause_type, 1))
 
 
-def assess_clause(rules: dict[str, PlaybookRule], clause: Clause) -> Assessment | None:
+def active_exceptions(session: Session, clause_ids: list[int] | None = None) -> dict[int, PlaybookException]:
+    """The GC exceptions still in force, by clause id."""
+    query = select(PlaybookException).where(PlaybookException.withdrawn_at.is_(None))
+    if clause_ids is not None:
+        if not clause_ids:
+            return {}
+        query = query.where(PlaybookException.clause_id.in_(clause_ids))
+    return {e.clause_id: e for e in session.scalars(query)}
+
+
+def to_exception(exception: PlaybookException) -> PlaybookExceptionOut:
+    return PlaybookExceptionOut(
+        id=exception.id, approved_value=exception.approved_value, approved_by=exception.approved_by,
+        approved_on=exception.approved_on, note=exception.note,
+        recorded_by=exception.recorded_by, recorded_at=exception.recorded_at,
+    )
+
+
+def assess_clause(
+    rules: dict[str, PlaybookRule], clause: Clause, exception: PlaybookException | None = None
+) -> Assessment | None:
+    """Where a clause lands in the playbook.
+
+    A GC exception only covers the exact term the GC approved. If the term is later
+    corrected to something else, the exception no longer applies and it's flagged again.
+    """
     rule = rules.get(clause.clause_type)
     if rule is None:
         return None
@@ -369,8 +396,16 @@ def assess_clause(rules: dict[str, PlaybookRule], clause: Clause) -> Assessment 
         clause.clause_type, rule.standard, rule.fallback, values, unit, clause.presence,
         pending=clause.review_status == "pending",
     )
-    if result is not None:
-        result.guidance = rule.guidance
+    if result is None:
+        return None
+    result.guidance = rule.guidance
+    if exception is not None and result.tier == "outside" and exception.approved_value == result.value:
+        result.exception = to_exception(exception)
+        result.needs_sign_off = False
+        result.reason = (
+            f"{result.value} is off our playbook, but {exception.approved_by} signed off on it "
+            f"as an exception."
+        )
     return result
 
 
@@ -403,8 +438,9 @@ def check_vendors(session: Session, counterparty_id: int | None = None) -> Playb
         for p in positions if "MSA" in p.contract_type_scope
     }
 
+    exceptions = active_exceptions(session)
     rows: list[PlaybookRow] = []
-    outside = 0
+    outside = excepted = 0
     for vendor in vendors:
         cells: dict[str, Cell | None] = {}
         msas = [c for c in vendor.contracts if c.contract_type == "MSA"]
@@ -420,11 +456,15 @@ def check_vendors(session: Session, counterparty_id: int | None = None) -> Playb
             if clause is None:
                 cells[clause_type] = None
                 continue
-            result = assess_clause(rules, clause)
+            result = assess_clause(rules, clause, exceptions.get(clause.id))
             if result is None:
                 cells[clause_type] = None
                 continue
-            outside += result.tier == "outside"
-            cells[clause_type] = Cell(**result.model_dump(), source=_source(clause.contract))
+            if result.tier == "outside":
+                if result.exception:
+                    excepted += 1
+                else:
+                    outside += 1
+            cells[clause_type] = Cell(**result.model_dump(), source=_source(clause.contract), clause_id=clause.id)
         rows.append(PlaybookRow(counterparty_id=vendor.id, counterparty_name=vendor.name, cells=cells))
-    return PlaybookCheck(rules=get_rules(session), rows=rows, outside_count=outside)
+    return PlaybookCheck(rules=get_rules(session), rows=rows, outside_count=outside, exception_count=excepted)

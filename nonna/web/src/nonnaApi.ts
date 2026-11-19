@@ -226,12 +226,23 @@ export interface ReviewOutcome {
 // Thrown when a clause differs from the agreed baseline and needs a note to approve
 export class BaselineConflictError extends Error {}
 
+// The term is off Aurelia's playbook, so approving it needs the GC's sign-off first
+export class GcSignOffError extends Error {}
+
+// The GC's sign-off, as the attorney records it
+export interface GcSignOff {
+  approved_by: string // the GC's name
+  approved_on: string // YYYY-MM-DD
+  note: string // why the GC said yes
+}
+
 // Record an attorney's decision about one extracted clause
 export async function reviewClause(
   clauseId: number,
   action: ReviewAction,
   note?: string,
   correction?: { values: Corrections; asChange?: boolean },
+  gcSignOff?: GcSignOff,
 ): Promise<ReviewOutcome> {
   const response = await fetch(`/api/clauses/${clauseId}/reviews`, {
     method: 'POST',
@@ -242,11 +253,15 @@ export async function reviewClause(
       note: note ?? null,
       corrections: correction?.values ?? null,
       as_change: correction?.asChange ?? false,
+      gc_signoff: gcSignOff ?? null,
     }),
   })
 
   if (response.status === 409) {
     throw new BaselineConflictError(await errorDetail(response, "This doesn't match the agreed baseline."))
+  }
+  if (response.status === 428) {
+    throw new GcSignOffError(await errorDetail(response, "This term is off the playbook, so it needs the GC's sign-off."))
   }
   if (!response.ok) {
     throw new Error(await errorDetail(response, `Nonna couldn't save that decision (error ${response.status}).`))
@@ -419,6 +434,18 @@ export interface PlaybookAssessment {
   value: string // the term as Nonna reads it, like "$500,000"
   needs_sign_off: boolean // off playbook and still waiting for review
   guidance: string | null // the playbook's advice for this term
+  exception: PlaybookException | null // the GC signed off on this exact term
+}
+
+// The GC's sign-off on one off-playbook term. A permanent record, only ever withdrawn.
+export interface PlaybookException {
+  id: number
+  approved_value: string
+  approved_by: string
+  approved_on: string
+  note: string
+  recorded_by: string
+  recorded_at: string
 }
 
 export interface PlaybookRule {
@@ -437,12 +464,14 @@ export interface PlaybookRule {
 
 export interface PlaybookCell extends PlaybookAssessment {
   source: ContractRef
+  clause_id: number
 }
 
 export interface PlaybookCheck {
   rules: PlaybookRule[]
   rows: { counterparty_id: number; counterparty_name: string; cells: Record<string, PlaybookCell | null> }[]
-  outside_count: number
+  outside_count: number // off playbook with no GC exception
+  exception_count: number // off playbook, but the GC signed off
 }
 
 export async function fetchPlaybook(): Promise<PlaybookCheck> {
@@ -471,6 +500,26 @@ export async function updatePlaybookRule(
   return (await response.json()) as PlaybookRule
 }
 
+// Record the GC's sign-off on an off-playbook term in a signed contract
+export async function recordPlaybookException(clauseId: number, signOff: GcSignOff): Promise<PlaybookException> {
+  const response = await fetch(`/api/clauses/${clauseId}/playbook-exception`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...signOff, recorded_by: CURRENT_USER }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't save that exception."))
+  return (await response.json()) as PlaybookException
+}
+
+// Withdraw a GC exception. It stays in the history, and the term is flagged again.
+export async function withdrawPlaybookException(exceptionId: number, note: string): Promise<void> {
+  const response = await fetch(`/api/playbook-exceptions/${exceptionId}/withdraw`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ withdrawn_by: CURRENT_USER, note }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't withdraw that exception."))
+}
 
 
 // ---------------------------------------------------------------------------

@@ -2,13 +2,17 @@ import { useEffect, useState } from 'react'
 import type { useBulkReview, ReviewResult } from './bulkReview'
 import CorrectionForm from './CorrectionForm'
 import type { Term } from './format'
-import { BaselineConflictError, reviewClause } from './nonnaApi'
-import type { ReviewAction } from './nonnaApi'
+import GcSignOffForm from './GcSignOffForm'
+import { BaselineConflictError, GcSignOffError, reviewClause } from './nonnaApi'
+import type { GcSignOff, ReviewAction } from './nonnaApi'
 
 type State =
   | { kind: 'idle' }
   | { kind: 'busy' }
   | { kind: 'conflict'; message: string }
+  // Off the playbook: the approval waits for the GC's sign-off. Keeps the action and note
+  // so an "approve as a change" doesn't lose its note.
+  | { kind: 'signoff'; message?: string; action: ReviewAction; note?: string; busy?: boolean }
   | { kind: 'done'; message: string; approved: boolean }
 
 interface Props {
@@ -16,11 +20,12 @@ interface Props {
   external?: ReviewResult // a result from "Approve all"
   onResolved?: () => void // tells the parent this clause is decided
   correct?: { clauseType: string; terms: Term[] } // shows "Fix value" when set
+  needsSignOff?: boolean // off the playbook, so Approve asks for the GC's sign-off first
 }
 
 // Approve or reject one extracted clause. These buttons call the API directly,
 // so the LLM never approves anything.
-export default function ReviewControls({ clauseId, external, onResolved, correct }: Props) {
+export default function ReviewControls({ clauseId, external, onResolved, correct, needsSignOff }: Props) {
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [fixing, setFixing] = useState(false)
   const [note, setNote] = useState('')
@@ -31,28 +36,40 @@ export default function ReviewControls({ clauseId, external, onResolved, correct
     if (!external) return
     if (external.kind === 'error') {
       setError(external.message)
+    } else if (external.kind === 'signoff') {
+      setError('')
+      setState({ kind: 'signoff', message: external.message, action: 'approved' })
     } else {
       setError('')
       setState(external)
     }
   }, [external])
 
-  async function submit(action: ReviewAction, withNote?: string) {
+  async function submit(action: ReviewAction, withNote?: string, gcSignOff?: GcSignOff) {
     const previous = state
     setError('')
-    setState({ kind: 'busy' })
+    setState(previous.kind === 'signoff' ? { ...previous, busy: true } : { kind: 'busy' })
     try {
-      const outcome = await reviewClause(clauseId, action, withNote)
+      const outcome = await reviewClause(clauseId, action, withNote, undefined, gcSignOff)
       setState({ kind: 'done', message: outcome.message, approved: action !== 'rejected' })
       onResolved?.()
     } catch (err) {
       if (err instanceof BaselineConflictError) {
         setState({ kind: 'conflict', message: err.message })
+      } else if (err instanceof GcSignOffError) {
+        setState({ kind: 'signoff', message: err.message, action, note: withNote })
       } else {
         setError(err instanceof Error ? err.message : "Nonna couldn't save that decision.")
-        setState(previous.kind === 'conflict' ? previous : { kind: 'idle' })
+        if (previous.kind === 'signoff') setState({ ...previous, busy: false })
+        else setState(previous.kind === 'conflict' ? previous : { kind: 'idle' })
       }
     }
+  }
+
+  function approve() {
+    // We already know it's off the playbook, so ask for the sign-off before calling the API
+    if (needsSignOff) setState({ kind: 'signoff', action: 'approved' })
+    else void submit('approved')
   }
 
   function approveAsChange() {
@@ -68,6 +85,25 @@ export default function ReviewControls({ clauseId, external, onResolved, correct
       <p className={state.approved ? 'review-done' : 'review-done review-rejected'}>
         {state.approved ? '✓' : '✕'} {state.message}
       </p>
+    )
+  }
+
+  if (state.kind === 'signoff') {
+    const { action, note: changeNote } = state
+    return (
+      <div className="review-controls">
+        <GcSignOffForm
+          message={state.message}
+          submitLabel={action === 'approved_change' ? 'Approve as a change' : 'Approve with sign-off'}
+          busy={Boolean(state.busy)}
+          error={error}
+          onSubmit={(signOff) => void submit(action, changeNote, signOff)}
+          onCancel={() => {
+            setError('')
+            setState({ kind: 'idle' })
+          }}
+        />
+      </div>
     )
   }
 
@@ -116,9 +152,9 @@ export default function ReviewControls({ clauseId, external, onResolved, correct
             type="button"
             className="btn btn-sm btn-primary"
             disabled={state.kind === 'busy'}
-            onClick={() => void submit('approved')}
+            onClick={approve}
           >
-            Approve
+            {needsSignOff ? 'Approve with GC sign-off' : 'Approve'}
           </button>
         )}
         <button

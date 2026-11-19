@@ -3,8 +3,15 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { formatDate } from './format'
-import { CURRENT_USER, fetchPlaybook, updatePlaybookRule } from './nonnaApi'
-import type { PlaybookAssessment, PlaybookCheck, PlaybookRule, Tier } from './nonnaApi'
+import GcSignOffForm from './GcSignOffForm'
+import {
+  CURRENT_USER,
+  fetchPlaybook,
+  recordPlaybookException,
+  updatePlaybookRule,
+  withdrawPlaybookException,
+} from './nonnaApi'
+import type { PlaybookAssessment, PlaybookCell, PlaybookCheck, PlaybookException, PlaybookRule, Tier } from './nonnaApi'
 import TermLabel from './TermLabel'
 
 export const TIER_LABELS: Record<Tier, string> = {
@@ -14,7 +21,24 @@ export const TIER_LABELS: Record<Tier, string> = {
   not_comparable: "Can't compare",
 }
 
+// Who signed off on an exception, when, and why
+export function ExceptionLine({ exception }: { exception: PlaybookException }) {
+  return (
+    <span className="playbook-exception-line">
+      GC exception: {exception.approved_by} signed off on {exception.approved_value} on{' '}
+      {formatDate(exception.approved_on)}. Why: {exception.note}
+    </span>
+  )
+}
+
 export function PlaybookBadge({ assessment }: { assessment: PlaybookAssessment }) {
+  if (assessment.exception) {
+    return (
+      <span className="badge badge-tier-exception" title={assessment.reason}>
+        Exception approved
+      </span>
+    )
+  }
   return (
     <span className={`badge badge-tier-${assessment.tier}`} title={assessment.reason}>
       {assessment.needs_sign_off ? 'Needs GC sign-off' : TIER_LABELS[assessment.tier]}
@@ -58,7 +82,7 @@ function gcEmailLink(assessment: PlaybookAssessment, about: EmailContext): strin
 }
 
 export function EmailGcLink({ assessment, about }: { assessment: PlaybookAssessment; about: EmailContext }) {
-  if (assessment.tier !== 'outside') return null
+  if (assessment.tier !== 'outside' || assessment.exception) return null
   return (
     <a className="playbook-email" href={gcEmailLink(assessment, about)}>
       ✉ Email the GC
@@ -78,21 +102,126 @@ export function PlaybookNote({
   return (
     <p className="playbook-note">
       <PlaybookBadge assessment={assessment} />
-      {assessment.tier !== 'standard' && <span>{assessment.reason}</span>}
+      {assessment.exception ? (
+        <ExceptionLine exception={assessment.exception} />
+      ) : (
+        assessment.tier !== 'standard' && <span>{assessment.reason}</span>
+      )}
       {about && <EmailGcLink assessment={assessment} about={about} />}
     </p>
   )
 }
 
-// Every vendor down the side, every key term across the top
-export function PlaybookMatrix({ data }: { data: PlaybookCheck }) {
-  const columns = data.rules
-  const flagged = data.rows.flatMap((row) =>
-    columns
-      .map((rule) => ({ rule, cell: row.cells[rule.clause_type] }))
-      .filter(({ cell }) => cell && (cell.tier === 'outside' || cell.tier === 'not_comparable'))
-      .map(({ rule, cell }) => ({ vendor: row.counterparty_name, rule, cell: cell! })),
+// "Record GC exception" on a flagged term in a signed contract
+function RecordException({ cell, onSaved }: { cell: PlaybookCell; onSaved: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!open) {
+    return (
+      <button type="button" className="lib-fix" onClick={() => setOpen(true)}>
+        Record GC exception
+      </button>
+    )
+  }
+  return (
+    <GcSignOffForm
+      submitLabel="Save exception"
+      busy={busy}
+      error={error}
+      onSubmit={async (signOff) => {
+        setBusy(true)
+        setError('')
+        try {
+          await recordPlaybookException(cell.clause_id, signOff)
+          setOpen(false)
+          onSaved()
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Couldn't save that exception.")
+        } finally {
+          setBusy(false)
+        }
+      }}
+      onCancel={() => {
+        setOpen(false)
+        setError('')
+      }}
+    />
   )
+}
+
+// Withdraw an exception. It stays in the history, and the term is flagged again.
+function WithdrawException({ exception, onSaved }: { exception: PlaybookException; onSaved: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!open) {
+    return (
+      <button type="button" className="lib-fix" onClick={() => setOpen(true)}>
+        Withdraw
+      </button>
+    )
+  }
+
+  async function withdraw() {
+    if (!note.trim()) {
+      setError("Say why the exception doesn't apply anymore.")
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await withdrawPlaybookException(exception.id, note.trim())
+      setOpen(false)
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't withdraw that exception.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="gc-signoff">
+      <label className="correction-field">
+        <span>Why doesn't it apply anymore?</span>
+        <textarea
+          className="review-note"
+          rows={2}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Renegotiated at renewal. The new MSA has a $2M cap."
+        />
+      </label>
+      {error && <p className="intake-error">{error}</p>}
+      <div className="intake-actions">
+        <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void withdraw()}>
+          {busy ? 'Withdrawing…' : 'Withdraw exception'}
+        </button>
+        <button type="button" className="btn btn-sm btn-quiet" disabled={busy} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Every vendor down the side, every key term across the top.
+// onChanged turns on recording and withdrawing GC exceptions (the Playbook page, not chat).
+export function PlaybookMatrix({ data, onChanged }: { data: PlaybookCheck; onChanged?: () => void }) {
+  const columns = data.rules
+  const cells = data.rows.flatMap((row) =>
+    columns
+      .map((rule) => ({ vendor: row.counterparty_name, rule, cell: row.cells[rule.clause_type] }))
+      .filter((item): item is { vendor: string; rule: PlaybookRule; cell: PlaybookCell } => Boolean(item.cell)),
+  )
+  const flagged = cells.filter(
+    ({ cell }) => !cell.exception && (cell.tier === 'outside' || cell.tier === 'not_comparable'),
+  )
+  const excepted = cells.filter(({ cell }) => cell.exception)
 
   return (
     <>
@@ -152,7 +281,39 @@ export function PlaybookMatrix({ data }: { data: PlaybookCheck }) {
                 <p className="playbook-flag-source">
                   From {cell.source.title}, {formatDate(cell.source.effective_date)}
                 </p>
-                <EmailGcLink assessment={cell} about={{ vendor, term: rule.label, contract: cell.source }} />
+                <div className="playbook-flag-actions">
+                  <EmailGcLink assessment={cell} about={{ vendor, term: rule.label, contract: cell.source }} />
+                  {onChanged && cell.tier === 'outside' && <RecordException cell={cell} onSaved={onChanged} />}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {excepted.length > 0 && (
+        <div className="playbook-flags-wrap">
+          <p className="playbook-subhead">
+            GC exceptions <span className="lib-group-count">{excepted.length}</span>
+          </p>
+          <ul className="playbook-flags">
+            {excepted.map(({ vendor, rule, cell }) => (
+              <li key={`${vendor}-${rule.clause_type}`} className="playbook-flag playbook-flag-exception">
+                <div className="playbook-flag-head">
+                  <PlaybookBadge assessment={cell} />
+                  <span className="playbook-flag-vendor">{vendor}</span>
+                  <span className="playbook-flag-term">
+                    <TermLabel type={rule.clause_type}>{rule.label}</TermLabel>
+                  </span>
+                </div>
+                <p className="playbook-flag-reason">
+                  <ExceptionLine exception={cell.exception!} />
+                </p>
+                <p className="playbook-flag-source">
+                  From {cell.source.title}, {formatDate(cell.source.effective_date)} · recorded by{' '}
+                  {cell.exception!.recorded_by}
+                </p>
+                {onChanged && <WithdrawException exception={cell.exception!} onSaved={onChanged} />}
               </li>
             ))}
           </ul>
@@ -351,7 +512,11 @@ export default function Playbook() {
               ? 'Loading…'
               : `${data.rows.length} vendors checked · ${data.outside_count} ${
                   data.outside_count === 1 ? 'term' : 'terms'
-                } off playbook`}
+                } off playbook${
+                  data.exception_count
+                    ? ` · ${data.exception_count} GC ${data.exception_count === 1 ? 'exception' : 'exceptions'}`
+                    : ''
+                }`}
           </p>
         </div>
         <button type="button" className="btn btn-sm btn-quiet" onClick={() => setLoadCount((n) => n + 1)}>
@@ -367,10 +532,11 @@ export default function Playbook() {
             <h3 className="lib-group-title">Vendors vs our playbook</h3>
             <p className="playbook-intro">
               Each vendor's agreed master-agreement terms. These contracts are already signed, so
-              raise anything off playbook at renewal or renegotiation. New terms that are off playbook
-              need GC sign-off in Review before anyone approves them.
+              raise anything off playbook at renewal or renegotiation, or record a GC exception if the GC
+              is fine with it. New terms that are off playbook need GC sign-off in Review before anyone
+              approves them.
             </p>
-            <PlaybookMatrix data={data} />
+            <PlaybookMatrix data={data} onChanged={() => setLoadCount((n) => n + 1)} />
           </section>
 
           <section className="lib-group">

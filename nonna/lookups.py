@@ -630,10 +630,11 @@ def get_counterparty_library(session: Session, counterparty_id: int) -> Counterp
 
     by_contract: dict[int, list[ClauseOut]] = {}
     rules = playbook.current_rules(session)
+    exceptions = playbook.active_exceptions(session, [c.id for c in clauses])
     assessments = {}
     for clause in clauses:
         by_contract.setdefault(clause.contract_id, []).append(to_clause(clause))
-        result = playbook.assess_clause(rules, clause)
+        result = playbook.assess_clause(rules, clause, exceptions.get(clause.id))
         if result is not None:
             assessments[clause.id] = result
 

@@ -268,3 +268,34 @@ class PlaybookRule(Base):
     def __repr__(self) -> str:
         state = "current" if self.superseded_at is None else "superseded"
         return f"<PlaybookRule {self.clause_type} ({state})>"
+
+
+
+
+class PlaybookException(Base):
+    """The GC's sign-off on one term that's off the playbook.
+
+    A permanent record: Postgres blocks edits and deletes. The only change allowed is
+    withdrawing it once (withdrawn_at, withdrawn_by, withdraw_note).
+    """
+
+    __tablename__ = "playbook_exceptions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    clause_id: Mapped[int] = mapped_column(ForeignKey("clauses.id"))
+    approved_value: Mapped[str] = mapped_column(Text)  # the term the GC approved, like "$500,000"
+    approved_by: Mapped[str] = mapped_column(Text)
+    approved_on: Mapped[date] = mapped_column(Date)
+    note: Mapped[str] = mapped_column(Text)
+    recorded_by: Mapped[str] = mapped_column(Text)
+    recorded_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, server_default=func.now())
+    review_decision_id: Mapped[int | None] = mapped_column(ForeignKey("review_decisions.id"))
+    withdrawn_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ)
+    withdrawn_by: Mapped[str | None] = mapped_column(Text)
+    withdraw_note: Mapped[str | None] = mapped_column(Text)
+
+    clause: Mapped[Clause] = relationship()
+
+    def __repr__(self) -> str:
+        state = "active" if self.withdrawn_at is None else "withdrawn"
+        return f"<PlaybookException on clause {self.clause_id} ({state})>"

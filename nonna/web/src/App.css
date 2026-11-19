@@ -1533,6 +1533,49 @@
   text-decoration: underline;
 }
 
+/* GC exceptions: off playbook, but the GC signed off on purpose */
+.badge-tier-exception {
+  background: rgba(82, 94, 53, 0.08);
+  color: var(--basil);
+  border: 1px solid rgba(82, 94, 53, 0.35);
+}
+
+.playbook-exception-line {
+  color: var(--espresso);
+}
+
+.playbook-flag-exception {
+  background: #fbfaf5;
+}
+
+.playbook-flag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+}
+
+.playbook-flag-actions .lib-fix {
+  margin-top: 0;
+}
+
+.gc-signoff {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 14px 16px;
+  border: 1px solid #efeae3;
+  border-left: 3px solid var(--saffron);
+  border-radius: 10px;
+  background: var(--warm-white);
+}
+
+.gc-signoff .review-conflict,
+.gc-signoff .correction-title,
+.gc-signoff .intake-error {
+  margin: 0;
+}
+
 /* Inside a chat card, keep the flags and rules in one column */
 .nonna-card .playbook-flags {
   grid-template-columns: 1fr;

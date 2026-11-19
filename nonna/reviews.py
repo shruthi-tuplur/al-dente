@@ -7,6 +7,8 @@ Rules:
   approves it as an intentional change with a note. That moves the baseline and
   keeps the old one as history.
 - Rejecting never touches the baseline.
+- Approving a new term that's off Aurelia's playbook needs the GC's sign-off (who, when, and
+  why). The sign-off is saved as a GC exception in the same transaction as the approval.
 - Correcting fixes a value Nonna extracted wrong. The attorney always gets the last
   word, but the original value is kept in the decision log, and a correction still
   goes through the same baseline check as an approval.
@@ -24,11 +26,14 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
+from nonna import gc_exceptions
+from nonna.gc_exceptions import SignOffNeeded
 from nonna.lookups import SCOPE_FOR_TYPE, STATUS_FOR_ACTION, NotFound, ReviewRejected, to_decision
+
 from nonna.models import Clause, ClauseTerm, CounterpartyPosition, ReviewDecision
 from nonna.schemas import BASELINE_TYPES, DecisionOut, ReviewIn
 
-__all__ = ["BaselineConflict", "NotFound", "ReviewOutcome", "ReviewRejected", "review_clause"]
+__all__ = ["BaselineConflict", "NotFound", "ReviewOutcome", "ReviewRejected", "SignOffNeeded", "review_clause"]
 
 # Which contract types share a baseline (an NDA never sets the MSA's cap, for example)
 
@@ -281,6 +286,17 @@ def review_clause(session: Session, clause_id: int, review: ReviewIn) -> ReviewO
             f"{next_step}"
         )
 
+    # A new term that's off the playbook needs the GC before anyone approves it.
+    # (A term that was already reviewed is signed: that's for the Playbook page, not here.)
+    off_playbook = None
+    if approving and not already_reviewed:
+        off_playbook = gc_exceptions.needs_sign_off(session, clause, proposed)
+        if off_playbook is not None and review.gc_signoff is None:
+            raise SignOffNeeded(
+                f"This {label} is off Aurelia's playbook ({off_playbook.value}). "
+                "Record the GC's sign-off (who, when, and why) to approve it."
+            )
+
     # Record the decision, fix any values, and update the clause's status
     if correcting:
         _apply_corrections(session, clause, new_values)
@@ -294,6 +310,11 @@ def review_clause(session: Session, clause_id: int, review: ReviewIn) -> ReviewO
     session.add(decision)
     clause.review_status = STATUS_FOR_ACTION[review.action]
     session.flush()
+
+    if off_playbook is not None and review.gc_signoff is not None:
+        gc_exceptions.save_sign_off(
+            session, clause, off_playbook, review.gc_signoff, review.reviewer, review_decision_id=decision.id
+        )
 
     # Keep the counterparty's baseline up to date
     baseline_result: Literal["created", "moved", "unchanged", "none"] = "none"
@@ -326,11 +347,10 @@ def review_clause(session: Session, clause_id: int, review: ReviewIn) -> ReviewO
         raise ReviewRejected(str(error.orig).splitlines()[0]) from error
 
     session.refresh(decision)
-    return ReviewOutcome(
-        decision=to_decision(decision),
-        baseline=baseline_result,
-        message=_message(review.action, baseline_result, label, counterparty_name, is_current_baseline),
-    )
+    message = _message(review.action, baseline_result, label, counterparty_name, is_current_baseline)
+    if off_playbook is not None and review.gc_signoff is not None:
+        message += f" {review.gc_signoff.approved_by}'s sign-off is saved as a GC exception."
+    return ReviewOutcome(decision=to_decision(decision), baseline=baseline_result, message=message)
 
 
 def _message(action: str, baseline: str, label: str, counterparty: str, is_current_baseline: bool) -> str:

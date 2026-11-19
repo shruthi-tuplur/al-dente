@@ -90,6 +90,7 @@ function ContractGroup({ items, onDecided }: { items: QueueItem[]; onDecided: ()
                   ? { clauseType: item.clause.clause_type, terms: item.clause.terms }
                   : undefined
               }
+              needsSignOff={item.playbook?.needs_sign_off}
             />
           </li>
         ))}

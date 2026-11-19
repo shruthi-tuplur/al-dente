@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { BaselineConflictError, reviewClause } from './nonnaApi'
-import type { Corrections } from './nonnaApi'
+import GcSignOffForm from './GcSignOffForm'
+import { BaselineConflictError, GcSignOffError, reviewClause } from './nonnaApi'
+import type { Corrections, GcSignOff } from './nonnaApi'
 import type { Term } from './format'
 
 // One field an attorney can fix, per clause type
@@ -78,15 +79,18 @@ export default function CorrectionForm({ clauseId, clauseType, terms, onSaved, o
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [conflict, setConflict] = useState('')
+  // The fixed value is off the playbook, so saving it needs the GC's sign-off
+  const [signOff, setSignOff] = useState<{ message: string; asChange: boolean } | null>(null)
   const [error, setError] = useState('')
 
   function update(key: string, value: string | boolean) {
     setValues((current) => ({ ...current, [key]: value }))
     setConflict('')
+    setSignOff(null)
     setError('')
   }
 
-  async function save(asChange: boolean) {
+  async function save(asChange: boolean, gcSignOff?: GcSignOff) {
     const missing = fields.find(
         (f) => f.kind !== 'yes_no' && !OPTIONAL.has(f.key) && String(values[f.key]).trim() === '',
       )
@@ -103,10 +107,11 @@ export default function CorrectionForm({ clauseId, clauseType, terms, onSaved, o
     try {
             // Leave out optional fields that were left blank
             const filled = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''))
-            const outcome = await reviewClause(clauseId, 'corrected', note.trim(), { values: filled, asChange })
+            const outcome = await reviewClause(clauseId, 'corrected', note.trim(), { values: filled, asChange }, gcSignOff)
       onSaved(outcome.message)
     } catch (err) {
       if (err instanceof BaselineConflictError) setConflict(err.message)
+      else if (err instanceof GcSignOffError) setSignOff({ message: err.message, asChange })
       else setError(err instanceof Error ? err.message : "Nonna couldn't save that correction.")
     } finally {
       setBusy(false)
@@ -175,24 +180,38 @@ export default function CorrectionForm({ clauseId, clauseType, terms, onSaved, o
         aria-label="Note explaining the correction"
       />
 
-      {conflict && <p className="review-conflict">⚠ {conflict}</p>}
+{conflict && !signOff && <p className="review-conflict">⚠ {conflict}</p>}
 
-      <div className="intake-actions">
-        {conflict ? (
-          <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void save(true)}>
-            Save as a change
-          </button>
-        ) : (
-          <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
-            {busy ? 'Saving…' : 'Save correction'}
-          </button>
-        )}
-        <button type="button" className="btn btn-sm btn-quiet" disabled={busy} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
+{signOff ? (
+  <GcSignOffForm
+    message={signOff.message}
+    submitLabel="Save with sign-off"
+    busy={busy}
+    error={error}
+    onSubmit={(gc) => void save(signOff.asChange, gc)}
+    onCancel={() => {
+      setSignOff(null)
+      setError('')
+    }}
+  />
+) : (
+  <div className="intake-actions">
+    {conflict ? (
+      <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => void save(true)}>
+        Save as a change
+      </button>
+    ) : (
+      <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+        {busy ? 'Saving…' : 'Save correction'}
+      </button>
+    )}
+    <button type="button" className="btn btn-sm btn-quiet" disabled={busy} onClick={onCancel}>
+      Cancel
+    </button>
+  </div>
+)}
 
-      {error && <p className="intake-error">{error}</p>}
-    </form>
+{error && !signOff && <p className="intake-error">{error}</p>}
+</form>
   )
 }

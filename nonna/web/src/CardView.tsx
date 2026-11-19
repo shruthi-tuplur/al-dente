@@ -9,7 +9,7 @@ import ClauseBlock from './ClauseBlock'
 import { canCorrect } from './CorrectionForm'
 import { DraftSummaryCard } from './Draft'
 import GoogleCalendarBar from './GoogleCalendar'
-import { PlaybookMatrix } from './Playbook'
+import { PlaybookMatrix, PlaybookNote } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
 import TermLabel from './TermLabel'
 import {
@@ -77,6 +77,7 @@ interface QueueItem {
   counterparty_name: string
   source: Source
   clause: ClauseData
+  playbook: PlaybookAssessment | null
 }
 
 interface ProfileData {
@@ -533,10 +534,12 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
               <span className="quote">
                 {item.source.title} · {sourceLine(item.source, item.clause)}
               </span>
+              {item.playbook?.needs_sign_off && <PlaybookNote assessment={item.playbook} />}
               <ReviewControls
                 clauseId={item.clause.id}
                 external={bulk.results[item.clause.id]}
                 onResolved={() => bulk.markResolved(item.clause.id)}
+                needsSignOff={item.playbook?.needs_sign_off}
                 correct={
                   canCorrect(item.clause.clause_type, item.clause.presence)
                     ? { clauseType: item.clause.clause_type, terms: item.clause.terms }

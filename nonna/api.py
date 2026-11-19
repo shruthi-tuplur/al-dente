@@ -16,8 +16,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
 from nonna import (
-    amendments, chat, deadlines, drafting, explain, extraction, google_calendar, intake, lookups, playbook, reviews,
-    sections,
+    amendments, chat, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar, intake, lookups,
+    playbook, reviews, sections,
 )
 from nonna.database import get_session
 from nonna.models import Clause, Contract
@@ -38,6 +38,7 @@ from nonna.schemas import (
     DecisionOut,
     EntityOut,
     HistoryEntry,
+    PlaybookExceptionOut,
     PositionOut,
     ReviewIn,
     ReviewQueueItem,
@@ -288,6 +289,8 @@ def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> revi
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except reviews.BaselineConflict as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except reviews.SignOffNeeded as error:
+        raise HTTPException(status.HTTP_428_PRECONDITION_REQUIRED, str(error)) from error
     except reviews.ReviewRejected as error:
         raise HTTPException(422, str(error)) from error
 
@@ -417,6 +420,34 @@ def get_playbook(session: SessionDep, counterparty_id: int | None = None) -> pla
     """Aurelia's playbook, and how every vendor's agreed terms measure up against it."""
     return playbook.check_vendors(session, counterparty_id)
 
+
+@app.post(
+    "/clauses/{clause_id}/playbook-exception",
+    response_model=PlaybookExceptionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_playbook_exception(
+    clause_id: int, change: gc_exceptions.ExceptionIn, session: SessionDep
+) -> PlaybookExceptionOut:
+    """Record the GC's sign-off on an off-playbook term in a signed contract."""
+    try:
+        return gc_exceptions.record_exception(session, clause_id, change)
+    except gc_exceptions.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except gc_exceptions.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/playbook-exceptions/{exception_id}/withdraw", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_playbook_exception(exception_id: int, change: gc_exceptions.WithdrawIn, session: SessionDep) -> Response:
+    """Withdraw a GC exception. It stays in the history, and the term is flagged again."""
+    try:
+        gc_exceptions.withdraw_exception(session, exception_id, change)
+    except gc_exceptions.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except gc_exceptions.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @app.put("/playbook/{clause_type}", response_model=playbook.RuleOut)
 def update_playbook_rule(clause_type: str, change: playbook.RuleIn, session: SessionDep) -> playbook.RuleOut:

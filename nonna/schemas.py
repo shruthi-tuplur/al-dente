@@ -131,6 +131,38 @@ class HistoryEntry(BaseModel):
 Tier = Literal["standard", "fallback", "outside", "not_comparable"]
 
 
+class GcSignOffIn(BaseModel):
+    """The GC's sign-off on a term that's off the playbook, as the attorney records it."""
+
+    approved_by: str = Field(min_length=1, max_length=200)  # the GC's name
+    approved_on: date
+    note: str = Field(min_length=1, max_length=2000)  # why the GC said yes
+
+    @model_validator(mode="after")
+    def check_sign_off(self) -> "GcSignOffIn":
+        self.approved_by = self.approved_by.strip()
+        self.note = self.note.strip()
+        if not self.approved_by:
+            raise ValueError("Say which GC signed off.")
+        if not self.note:
+            raise ValueError("Say why the GC signed off.")
+        if self.approved_on > date.today():
+            raise ValueError("The sign-off date can't be in the future.")
+        return self
+
+
+class PlaybookExceptionOut(BaseModel):
+    """An active GC exception: this off-playbook term was signed off on purpose."""
+
+    id: int
+    approved_value: str
+    approved_by: str
+    approved_on: date
+    note: str
+    recorded_by: str
+    recorded_at: datetime
+
+
 class PlaybookAssessment(BaseModel):
     """Where a term lands against Aurelia's playbook. Worked out by code, never the model."""
 
@@ -139,6 +171,7 @@ class PlaybookAssessment(BaseModel):
     value: str = ""  # the term as Nonna reads it, like "$500,000" or "Net 30"
     needs_sign_off: bool = False  # off playbook and still waiting for review, so ask the GC first
     guidance: str | None = None  # the playbook's advice for this term
+    exception: PlaybookExceptionOut | None = None  # the GC signed off on this exact term
 
 
 class ReviewQueueItem(BaseModel):
@@ -233,6 +266,8 @@ class ReviewIn(BaseModel):
     corrections: dict[str, Any] | None = None
     # For "corrected": save it even though it differs from the agreed baseline
     as_change: bool = False
+    # Needed to approve a term that's off the playbook: who at the GC's office said yes, and why
+    gc_signoff: GcSignOffIn | None = None
 
     @model_validator(mode="after")
     def check_note_and_corrections(self) -> "ReviewIn":
@@ -246,6 +281,8 @@ class ReviewIn(BaseModel):
                 raise ValueError("Add a short note explaining the correction.")
         elif self.corrections:
             raise ValueError("Corrections can only be sent with the corrected action.")
+        if self.gc_signoff and self.action == "rejected":
+            raise ValueError("GC sign-off is only for approving a term.")
         return self
 
 

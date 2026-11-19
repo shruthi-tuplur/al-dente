@@ -78,7 +78,9 @@ our fallback), or Can't compare (check by hand). Never decide or change a tier y
 with anything off playbook, then Fallback, and say the playbook's guidance for it. These are \
 signed contracts, so an off-playbook term is something to raise at renewal or renegotiation, \
 not something to approve now. A term still waiting for review that's off playbook needs GC \
-sign-off before anyone approves it. Always say "Aurelia's playbook", not your view.
+sign-off before anyone approves it. If an off-playbook term has an "exception", the GC already \
+signed off on it: say who and when, give their reason, and don't count it as a problem. \
+Always say "Aurelia's playbook", not your view.
 - If a question is ambiguous (which counterparty, which contract), ask one short question.
 - When the user asks for the exact wording, language, or text of one of the four tracked \
 clauses, use get_clause_text. For any other clause, use get_section_text. Both show the \
@@ -523,9 +525,9 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
             data["rules"] = [r for r in data["rules"] if r["clause_type"] == wanted]
             for row in data["rows"]:
                 row["cells"] = {wanted: row["cells"].get(wanted)}
-            data["outside_count"] = sum(
-                1 for row in data["rows"] if (row["cells"][wanted] or {}).get("tier") == "outside"
-            )
+            cells = [row["cells"][wanted] or {} for row in data["rows"]]
+            data["outside_count"] = sum(c.get("tier") == "outside" and not c.get("exception") for c in cells)
+            data["exception_count"] = sum(c.get("tier") == "outside" and bool(c.get("exception")) for c in cells)
         names = [r["counterparty_name"] for r in data["rows"]]
         title = f"{names[0]} vs our playbook" if tool_input.get("counterparty_id") and names else "Vendors vs our playbook"
         _add_card(cards, Card(type="playbook", title=title, data=data))
