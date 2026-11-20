@@ -555,7 +555,9 @@
 }
 
 .card-label {
+  flex: none;
   color: var(--espresso-muted);
+  white-space: nowrap;
 }
 
 .card-value {
