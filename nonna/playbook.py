@@ -134,6 +134,35 @@ def describe_value(clause_type: str, values: dict[str, Any], unit: str | None = 
         elif values.get("auto_renews") is False:
             text += ", no auto-renewal"
         return text
+    if clause_type == "termination_convenience":
+        who = {"either": "Either side", "aurelia": "Only us", "vendor": "Only the vendor"}.get(
+            str(values.get("who_may_terminate")), "Termination for convenience")
+        notice = values.get("notice_days")
+        if notice is None:
+            return who
+        return f"{who}, {int(notice)} days' notice" if int(notice) else f"{who}, immediately"
+    if clause_type == "confidentiality":
+        years = values.get("survival_years")
+        if values.get("perpetual"):
+            text = "Forever"
+        elif years is not None:
+            text = f"{int(years)} {'year' if int(years) == 1 else 'years'} after it ends"
+        else:
+            text = "Confidentiality"
+        return text + (", trade secrets for as long as they stay secret" if values.get("trade_secrets_indefinite") else "")
+    if clause_type == "insurance":
+        occurrence = values.get("general_liability_per_occurrence")
+        aggregate = values.get("general_liability_aggregate")
+        if occurrence is not None:
+            text = f"General liability {_money(occurrence)} per occurrence"
+            return text + (f" / {_money(aggregate)} aggregate" if aggregate is not None else "")
+        if aggregate is not None:
+            return f"General liability {_money(aggregate)} aggregate"
+        for key, label in (("products_liability_limit", "Products liability"),
+                           ("professional_liability_limit", "Professional liability")):
+            if values.get(key) is not None:
+                return f"{label} {_money(values[key])}"
+        return "Insurance"
     return ""
 
 

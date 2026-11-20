@@ -107,7 +107,8 @@ CREATE TABLE clauses (
     clause_type        TEXT NOT NULL
                        CHECK (clause_type IN ('liability_cap', 'indemnification',
                                               'payment_terms', 'governing_law',
-                                              'term_renewal')),
+                                              'term_renewal', 'termination_convenience',
+                                              'confidentiality', 'insurance')),
     section_number     TEXT,
     heading            TEXT,
     full_text          TEXT,
@@ -201,7 +202,9 @@ CREATE TABLE counterparty_positions (
     counterparty_id      BIGINT NOT NULL REFERENCES counterparties (id) ON DELETE CASCADE,
     clause_type          TEXT NOT NULL
                          CHECK (clause_type IN ('liability_cap', 'indemnification',
-                                                'payment_terms', 'governing_law')),
+                                                'payment_terms', 'governing_law',
+                                                'termination_convenience', 'confidentiality',
+                                                'insurance')),
     contract_type_scope  TEXT[] NOT NULL
                          CHECK (cardinality(contract_type_scope) > 0
                                 AND contract_type_scope <@ ARRAY['NDA', 'MSA', 'SOW',

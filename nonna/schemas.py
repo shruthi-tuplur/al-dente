@@ -18,12 +18,18 @@ class ClauseType(str, Enum):
     payment_terms = "payment_terms"
     governing_law = "governing_law"
     term_renewal = "term_renewal"
+    termination_convenience = "termination_convenience"
+    confidentiality = "confidentiality"
+    insurance = "insurance"
 
 
 
 # Clause types that have one agreed baseline per vendor. A contract's term and renewal
 # dates belong to that contract alone, so they're tracked but never compared across contracts.
-BASELINE_TYPES = ["liability_cap", "indemnification", "payment_terms", "governing_law"]
+BASELINE_TYPES = [
+    "liability_cap", "indemnification", "payment_terms", "governing_law",
+    "termination_convenience", "confidentiality", "insurance",
+]
 
 
 ReviewAction = Literal["approved", "rejected", "corrected", "approved_change"]
@@ -198,6 +204,12 @@ class VendorFilter(BaseModel):
     jurisdiction: str | None = None
     is_mutual: bool | None = None
     covers_ip_infringement: bool | None = None
+    notice_days_max: int | None = None  # termination for convenience on this many days' notice or less
+    who_may_terminate: Literal["either", "aurelia", "vendor"] | None = None
+    survival_years_min: int | None = None  # confidentiality lasting at least this many years after the end
+    survival_years_max: int | None = None
+    general_liability_below: Decimal | None = None  # per-occurrence general liability under this (USD)
+    general_liability_at_least: Decimal | None = None
     applies_to: Literal["MSA", "SOW", "NDA"] | None = None  # which kind of agreement
 
 

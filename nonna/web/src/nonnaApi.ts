@@ -1,4 +1,5 @@
 // Talking to Nonna's backend. The Vite proxy sends /api/... to FastAPI on port 8000.
+import type { ClauseType } from './format'
 
 export type Role = 'user' | 'nonna'
 
@@ -188,7 +189,7 @@ export interface ExtractedTerm {
 }
 
 export interface ExtractedClause {
-  clause_type: 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification' | 'term_renewal'
+  clause_type: ClauseType
   status: 'found' | 'redacted' | 'inherited' | 'unchanged' | 'not_found'
   clause_id: number | null
   section_number: string | null

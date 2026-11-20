@@ -6,7 +6,7 @@ import type { Term } from './format'
 
 // One field an attorney can fix, per clause type
 type Field =
-  | { key: string; label: string; kind: 'amount' | 'days' | 'text' | 'months'; placeholder: string }
+  | { key: string; label: string; kind: 'amount' | 'days' | 'text' | 'months' | 'years'; placeholder: string }
   | { key: string; label: string; kind: 'date' }
   | { key: string; label: string; kind: 'choice'; options: { value: string; label: string }[] }
   | { key: string; label: string; kind: 'yes_no' }
@@ -36,13 +36,47 @@ const FIELDS: Record<string, Field[]> = {
     { key: 'auto_renews', label: 'Renews automatically', kind: 'yes_no' },
     { key: 'renewal_term_months', label: 'Renewal period (months)', kind: 'months', placeholder: '12' },
     { key: 'notice_days', label: 'Notice to stop renewal (days)', kind: 'days', placeholder: '90' },
-  ],
+],
+termination_convenience: [
+  {
+    key: 'who_may_terminate',
+    label: 'Who can terminate',
+    kind: 'choice',
+    options: [
+      { value: 'either', label: 'Either side' },
+      { value: 'aurelia', label: 'Only us' },
+      { value: 'vendor', label: 'Only the vendor' },
+    ],
+  },
+  { key: 'notice_days', label: 'Notice needed (days)', kind: 'days', placeholder: '90' },
+],
+confidentiality: [
+  { key: 'survival_years', label: 'Years after it ends', kind: 'years', placeholder: '7' },
+  { key: 'perpetual', label: 'Lasts forever', kind: 'yes_no' },
+  { key: 'trade_secrets_indefinite', label: 'Trade secrets kept as long as they stay secret', kind: 'yes_no' },
+],
+insurance: [
+  { key: 'general_liability_per_occurrence', label: 'General liability per occurrence (USD)', kind: 'amount', placeholder: '2000000' },
+  { key: 'general_liability_aggregate', label: 'General liability aggregate (USD)', kind: 'amount', placeholder: '5000000' },
+  { key: 'products_liability_limit', label: 'Products liability (USD)', kind: 'amount', placeholder: '5000000' },
+  { key: 'professional_liability_limit', label: 'Professional liability (USD)', kind: 'amount', placeholder: '3000000' },
+  { key: 'years_after_term', label: 'Keep coverage for (years after it ends)', kind: 'years', placeholder: '3' },
+],
 }
 
-
 // Optional fields can be left blank (a term with no renewal has no renewal period)
-const OPTIONAL = new Set(['initial_term_months', 'end_date', 'renewal_term_months', 'notice_days'])
-
+const OPTIONAL = new Set([
+'initial_term_months',
+'end_date',
+'renewal_term_months',
+'notice_days',
+'survival_years',
+'general_liability_per_occurrence',
+'general_liability_aggregate',
+'products_liability_limit',
+'professional_liability_limit',
+'years_after_term',
+])
 export function canCorrect(clauseType: string, presence: string): boolean {
   return clauseType in FIELDS && presence === 'present'
 }

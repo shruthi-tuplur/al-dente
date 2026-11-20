@@ -43,6 +43,9 @@ CLAUSE_LABELS = {
     "payment_terms": "payment terms",
     "governing_law": "governing law",
     "term_renewal": "term and renewal",
+    "termination_convenience": "termination for convenience",
+    "confidentiality": "confidentiality period",
+    "insurance": "insurance minimums",
 }
 
 # The values an attorney can correct for each clause type, and what kind of value each is
@@ -58,12 +61,25 @@ CORRECTABLE_TERMS: dict[str, dict[str, str]] = {
         "renewal_term_months": "months",
         "notice_days": "notice",
     },
+    "termination_convenience": {"notice_days": "notice", "who_may_terminate": "party"},
+    "confidentiality": {"survival_years": "years", "perpetual": "yes_no", "trade_secrets_indefinite": "yes_no"},
+    "insurance": {
+        "general_liability_per_occurrence": "amount",
+        "general_liability_aggregate": "amount",
+        "products_liability_limit": "amount",
+        "professional_liability_limit": "amount",
+        "years_after_term": "years",
+    },
 }
 DEFAULT_UNITS = {
     "cap_amount": "USD", "net_days": "days",
     "initial_term_months": "months", "renewal_term_months": "months", "notice_days": "days",
+    "survival_years": "years", "years_after_term": "years",
+    "general_liability_per_occurrence": "USD", "general_liability_aggregate": "USD",
+    "products_liability_limit": "USD", "professional_liability_limit": "USD",
 }
 PAYMENT_STRUCTURES = {"invoice", "milestone"}
+PARTIES = {"either", "aurelia", "vendor"}
 
 Values = dict[str, Any]
 
@@ -121,14 +137,27 @@ def _parse_corrections(clause_type: str, corrections: dict[str, Any]) -> Values:
         if kind is None:
             raise ReviewRejected(f"{key.replace('_', ' ').capitalize()} can't be corrected on this clause.")
 
+        name = "The cap amount" if key == "cap_amount" else key.replace("_", " ").capitalize()
         if kind == "amount":
             try:
                 amount = Decimal(str(raw).replace(",", "").replace("$", "").strip())
             except InvalidOperation:
-                raise ReviewRejected("The cap amount needs to be a number, like 3000000.") from None
+                raise ReviewRejected(f"{name} needs to be a number, like 3000000.") from None
             if amount <= 0:
-                raise ReviewRejected("The cap amount needs to be more than zero.")
+                raise ReviewRejected(f"{name} needs to be more than zero.")
             parsed[key] = amount
+        elif kind == "years":
+            try:
+                years = int(str(raw).strip())
+            except ValueError:
+                raise ReviewRejected(f"{name} needs to be a whole number of years, like 5.") from None
+            if not 0 <= years <= 99:
+                raise ReviewRejected(f"{name} needs to be between 0 and 99 years.")
+            parsed[key] = Decimal(years)
+        elif kind == "party":
+            if raw not in PARTIES:
+                raise ReviewRejected("Who can terminate must be either side, only us, or only the vendor.")
+            parsed[key] = raw
         elif kind == "days":
             try:
                 days = int(str(raw).strip())

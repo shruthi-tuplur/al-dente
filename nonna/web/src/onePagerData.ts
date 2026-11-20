@@ -41,6 +41,9 @@ const ABSENT: Partial<Record<ClauseType, string>> = {
   payment_terms: 'Not stated',
   governing_law: 'Not stated',
   indemnification: 'None',
+  termination_convenience: 'Not allowed',
+  confidentiality: 'Not stated',
+  insurance: 'None required',
 }
 
 const KIND: Record<string, string> = {

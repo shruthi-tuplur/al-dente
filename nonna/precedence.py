@@ -42,12 +42,18 @@ COMPARED_KEYS: dict[str, list[str]] = {
     "liability_cap": ["cap_amount"],
     "governing_law": ["jurisdiction"],
     "indemnification": ["is_mutual", "covers_ip_infringement"],
+    "termination_convenience": ["notice_days", "who_may_terminate"],
+    "confidentiality": ["survival_years", "perpetual"],
+    "insurance": ["general_liability_per_occurrence", "general_liability_aggregate"],
 }
 LABELS = {
     "payment_terms": "Payment terms",
     "liability_cap": "Liability cap",
     "governing_law": "Governing law",
     "indemnification": "Indemnification",
+    "termination_convenience": "Termination for convenience",
+    "confidentiality": "Confidentiality period",
+    "insurance": "Insurance minimums",
 }
 # Contracts that sit under an MSA
 UNDER_MSA = ("SOW", "change_order")

@@ -3,7 +3,8 @@
 How it works:
 1. Split the full contract text into numbered sections.
 2. Find the right section for each clause type by its heading and wording (code, no AI).
-3. Pull exact values with code: cap amounts, payment days, governing law.
+3. Pull exact values with code: cap amounts, payment days, governing law, term and renewal,
+   termination for convenience, how long confidentiality lasts, and insurance minimums.
 4. Use Claude only for the messy part: reading the indemnification section.
 5. Save everything as pending, so an attorney reviews it before it counts.
 
@@ -273,6 +274,162 @@ def find_term_renewal(sections: list[Section]) -> Found | None:
                      note="Found the term section but no length or end date. Please check.")
     return Found("term_renewal", section, "deterministic", terms, units)
 
+
+# Who "Client" and "Provider" are, from Aurelia's side of the table
+AURELIA_WORDS = r"Client|Company|Customer|Sponsor|Buyer|Purchaser|Aurelia"
+VENDOR_WORDS = r"Provider|Service Provider|Supplier|Vendor|Contractor|Consultant|Seller|Manufacturer|CRO|CDMO"
+DAYS = r"(?:[a-z-]+\s+)?\((\d+)\)\s+(?:calendar\s+|business\s+)?days"
+YEARS = r"(?:[a-z-]+\s+)?\((\d+)\)\s+years?"
+CONVENIENCE = r"for convenience|for any reason|for no reason|without cause"
+
+
+def _article(sections: list[Section], section: Section) -> list[Section]:
+    """A section's whole article: 12, 12.1, 12.2, ..."""
+    top = section.number.split(".")[0]
+    return [s for s in sections if s.number == top or s.number.startswith(top + ".")] or [section]
+
+
+def _flat(text: str) -> str:
+    return re.sub(r"\s+", " ", text)
+
+
+def find_termination_convenience(sections: list[Section]) -> Found | None:
+    """Who can walk away without a reason, and how much notice they have to give."""
+    wording = rf"may terminate[^.]{{0,250}}?(?:{CONVENIENCE})|(?:{CONVENIENCE})[^.]{{0,250}}?may terminate"
+    section = _find(sections, ["convenience"], wording)
+    if section is None or not re.search(wording, _flat(section.text), re.IGNORECASE):
+        return None
+    flat = _flat(section.text)
+    sentence = next(
+        (x for x in re.split(r"(?<=\.)\s+", flat) if re.search(CONVENIENCE, x, re.IGNORECASE) and "may terminate" in x.lower()),
+        flat,
+    )
+    terms: dict[str, Any] = {}
+    units: dict[str, str] = {}
+
+    notice = re.search(DAYS, sentence, re.IGNORECASE)
+    if notice:
+        terms["notice_days"] = int(notice.group(1))
+        units["notice_days"] = "days"
+    elif re.search(r"immediately|effective upon (?:written )?notice", sentence, re.IGNORECASE):
+        terms["notice_days"] = 0
+        units["notice_days"] = "days"
+
+    who = re.search(rf"\b(either party|each party|{AURELIA_WORDS}|{VENDOR_WORDS})\b[^.]{{0,40}}?may terminate", sentence, re.IGNORECASE)
+    if who:
+        word = who.group(1).lower()
+        if word in ("either party", "each party"):
+            terms["who_may_terminate"] = "either"
+        elif re.fullmatch(AURELIA_WORDS, who.group(1), re.IGNORECASE):
+            terms["who_may_terminate"] = "aurelia"
+        else:
+            terms["who_may_terminate"] = "vendor"
+
+    if not terms:
+        return Found("termination_convenience", section, "deterministic",
+                     note="Found termination for convenience but not who can use it or the notice. Please check.")
+    note = None if "who_may_terminate" in terms else "Nonna couldn't tell who can terminate. Please check."
+    if "notice_days" not in terms:
+        note = "Nonna couldn't find the notice period. Please check."
+    return Found("termination_convenience", section, "deterministic", terms, units, note=note)
+
+
+def find_confidentiality(sections: list[Section]) -> Found | None:
+    """How long the confidentiality obligations last after the agreement ends."""
+    # A heading like "CONFIDENTIALITY", not a definition like '"Confidential Information" means'
+    heads = [s for s in sections if re.fullmatch(
+        r"(?:mutual\s+)?confidential(?:ity)?(?:\s+(?:obligations|information))?\.?", s.heading.strip(), re.IGNORECASE)]
+    heads = heads or [s for s in sections if "confidential" in s.heading.lower() and not s.heading.lstrip().startswith(('"', "“"))]
+    if not heads:
+        return None
+    lasts = r"perpetu|indefinite|so long as|survive|thereafter|following (?:the )?(?:termination|expiration)|" + YEARS
+    article = _article(sections, heads[0])
+    candidates = [s for s in article if s is not heads[0]] or article  # skip the bare "7. CONFIDENTIALITY" line
+    duration = next((s for s in candidates if re.search(rf"(?:{lasts})", _flat(s.text), re.IGNORECASE)), None)
+    if duration is None:
+        return Found("confidentiality", heads[0], "deterministic",
+                     note="Found the confidentiality section but not how long it lasts. Please check.")
+    flat = _flat(duration.text)
+    terms: dict[str, Any] = {}
+    units: dict[str, str] = {}
+    years = re.search(YEARS, flat, re.IGNORECASE)
+    if years:
+        terms["survival_years"] = int(years.group(1))
+        units["survival_years"] = "years"
+    if re.search(r"in perpetuity|perpetual|indefinite", flat, re.IGNORECASE):
+        terms["perpetual"] = True
+    elif years:
+        terms["perpetual"] = False
+    terms["trade_secrets_indefinite"] = bool(
+        re.search(r"trade secrets?[^.]{0,160}?(?:so long as|for as long as|until|remains?)", flat, re.IGNORECASE)
+    )
+    if "survival_years" not in terms and not terms.get("perpetual"):
+        return Found("confidentiality", duration, "deterministic", {"trade_secrets_indefinite": terms["trade_secrets_indefinite"]},
+                     note="Found how long confidentiality lasts, but not a number of years. Please check.")
+    return Found("confidentiality", duration, "deterministic", terms, units)
+
+
+INSURANCE_KINDS = {
+    "general_liability": r"(?:commercial\s+)?general\s+liability",
+    "products_liability": r"products?\s+liability",
+    "professional_liability": r"professional\s+liability|errors\s+(?:and|&)\s+omissions",
+}
+MONEY = r"(US\$|\$|USD\s?|EUR\s?|€|£)\s?([\d,]+(?:\.\d{2})?)"
+
+
+def _amount(match: re.Match[str]) -> tuple[Decimal, str]:
+    symbol = match.group(1).strip()
+    currency = {"$": "USD", "US$": "USD", "€": "EUR", "£": "GBP"}.get(symbol, symbol)
+    return Decimal(match.group(2).replace(",", "")), currency
+
+
+def find_insurance(sections: list[Section]) -> Found | None:
+    """The minimum insurance the vendor has to carry, read in code."""
+    section = _find(sections, ["insurance"], r"insurance[^.]{0,400}?" + MONEY)
+    if section is None:
+        return None
+    group = _article(sections, section)
+    article = Section(group[0].number, group[0].heading, "\n".join(s.text for s in group), group[0].start, group[-1].end)
+    flat = _flat(article.text)
+    if REDACTION.search(flat) and not re.search(MONEY, flat):
+        return Found("insurance", article, "deterministic", note="The insurance amounts are redacted.")
+
+    # Where each kind of coverage is mentioned, so its amounts are read from its own stretch of text
+    spots = sorted(
+        (m.start(), kind) for kind, pattern in INSURANCE_KINDS.items()
+        for m in [re.search(pattern, flat, re.IGNORECASE)] if m
+    )
+    terms: dict[str, Any] = {}
+    units: dict[str, str] = {}
+    for i, (start, kind) in enumerate(spots):
+        end = spots[i + 1][0] if i + 1 < len(spots) else min(len(flat), start + 400)
+        stretch = flat[start:end]
+        per = re.search(MONEY + r"\s*(?:per|each|for each)\s+(?:occurrence|claim|incident)", stretch, re.IGNORECASE)
+        total = re.search(MONEY + r"\s*(?:in the\s+|annual\s+|general\s+)?aggregate", stretch, re.IGNORECASE)
+        plain = re.search(MONEY, stretch)
+        if kind == "general_liability":
+            if per or (plain and not total):
+                amount, currency = _amount(per or plain)  # type: ignore[arg-type]
+                terms["general_liability_per_occurrence"], units["general_liability_per_occurrence"] = amount, currency
+            if total:
+                amount, currency = _amount(total)
+                terms["general_liability_aggregate"], units["general_liability_aggregate"] = amount, currency
+        else:
+            limit = total or per or plain
+            if limit:
+                key = f"{kind}_limit"
+                terms[key], units[key] = _amount(limit)
+
+    tail = re.search(r"for\s+" + YEARS + r"\s+(?:thereafter|after|following)", flat, re.IGNORECASE)
+    if tail:
+        terms["years_after_term"] = int(tail.group(1))
+        units["years_after_term"] = "years"
+
+    if not any(k.endswith(("_occurrence", "_aggregate", "_limit")) for k in terms):
+        return Found("insurance", article, "deterministic", terms, units,
+                     note="Found the insurance section but no coverage amounts Nonna recognizes. Please check.")
+    return Found("insurance", article, "deterministic", terms, units)
+
 # ---------------------------------------------------------------------------
 # Step 4: Claude reads the indemnification section (and only that section)
 # ---------------------------------------------------------------------------
@@ -356,7 +513,16 @@ FINDERS = {
     "governing_law": find_governing_law,
     "indemnification": find_indemnification,
     "term_renewal": find_term_renewal,
+    "termination_convenience": find_termination_convenience,
+    "confidentiality": find_confidentiality,
+    "insurance": find_insurance,
 }
+
+# Terms an SOW usually leaves to its MSA. When an SOW doesn't have its own, nothing is saved
+# (instead of an "incorporated by reference" row that someone has to review).
+MSA_LEVEL_TYPES = {"term_renewal", "termination_convenience", "confidentiality", "insurance"}
+# The newer terms, for contracts that were extracted before Nonna tracked them
+ADDED_LATER = ["termination_convenience", "confidentiality", "insurance"]
 
 
 def _term_row(clause_id: int, key: str, value: Any, unit: str | None) -> ClauseTerm:
@@ -409,6 +575,24 @@ def extract_contract(session: Session, contract_id: int) -> ExtractionResult:
                 note="No term of its own. It runs under the master agreement.",
             ))
             continue
+        # The newer MSA-level terms: an SOW without its own just follows the MSA
+        if found is None and has_parent and clause_type in MSA_LEVEL_TYPES:
+            results.append(ExtractedClause(
+                clause_type=clause_type, status="not_found", clause_id=None, section_number=None,
+                heading=None, snippet=None, method=None, terms=[],
+                note="Not in this contract, so the master agreement's applies.",
+            ))
+            continue
+
+        # The newer MSA-level terms: an SOW without its own just follows the MSA
+        if found is None and has_parent and clause_type in MSA_LEVEL_TYPES:
+            results.append(ExtractedClause(
+                clause_type=clause_type, status="not_found", clause_id=None, section_number=None,
+                heading=None, snippet=None, method=None, terms=[],
+                note="Not in this contract, so the master agreement's applies.",
+            ))
+            continue
+
         # A SOW or change order that doesn't restate a clause follows its MSA
         if found is None and has_parent:
             clause = Clause(
@@ -475,34 +659,63 @@ def extract_contract(session: Session, contract_id: int) -> ExtractionResult:
 
 
 
-def add_term_renewal(session: Session, contract: Contract) -> bool:
-    """Pull just the term and renewal clause from a contract extracted before Nonna tracked it.
+def add_missing_clauses(session: Session, contract: Contract, clause_types: list[str]) -> list[str]:
+    """Pull clause types a contract doesn't have yet, for contracts extracted before Nonna tracked them.
 
-    Saved as pending, like everything else. Returns True if a clause was added.
+    Code only (no AI), saved as pending like everything else. Returns the clause types added.
+    Doesn't commit, so the caller decides when to save.
     """
-    already = session.scalar(
-        select(Clause.id).where(Clause.contract_id == contract.id, Clause.clause_type == "term_renewal")
-    )
-    if already or not contract.full_text:
-        return False
-    found = find_term_renewal(split_sections(contract.full_text))
-    if found is None:
-        return False
-    clause = Clause(
-        contract_id=contract.id,
-        clause_type="term_renewal",
-        section_number=found.section.number,
-        heading=found.section.heading,
-        full_text=found.section.text,
-        start_offset=found.section.start,
-        end_offset=found.section.end,
-        presence="present",
-        extraction_method="deterministic",
-        review_status="pending",
-    )
-    session.add(clause)
-    session.flush()
-    for key, value in found.terms.items():
-        session.add(_term_row(clause.id, key, value, found.units.get(key)))
-    session.commit()
-    return True
+    if not contract.full_text:
+        return []
+    have = set(session.scalars(select(Clause.clause_type).where(Clause.contract_id == contract.id)))
+    sections = split_sections(contract.full_text)
+    added = []
+    for clause_type in clause_types:
+        if clause_type in have or clause_type == "indemnification":
+            continue
+        found = FINDERS[clause_type](sections)
+        if found is None:
+            continue
+        clause = Clause(
+            contract_id=contract.id,
+            clause_type=clause_type,
+            section_number=found.section.number,
+            heading=found.section.heading,
+            full_text=found.section.text,
+            start_offset=found.section.start,
+            end_offset=found.section.end,
+            presence="present",
+            extraction_method="deterministic",
+            review_status="pending",
+        )
+        session.add(clause)
+        session.flush()
+        for key, value in found.terms.items():
+            session.add(_term_row(clause.id, key, value, found.units.get(key)))
+        added.append(clause_type)
+    return added
+
+
+def add_term_renewal(session: Session, contract: Contract) -> bool:
+    """Pull just the term and renewal clause from a contract extracted before Nonna tracked it."""
+    added = add_missing_clauses(session, contract, ["term_renewal"])
+    if added:
+        session.commit()
+    return bool(added)
+
+
+if __name__ == "__main__":
+    # Pull the newer terms from contracts that were extracted before Nonna tracked them:
+    #   uv run python -m nonna.extraction
+    from nonna.database import SessionLocal
+
+    with SessionLocal() as session:
+        total = 0
+        for contract in session.scalars(select(Contract).order_by(Contract.id)):
+            added = add_missing_clauses(session, contract, ADDED_LATER)
+            if added:
+                total += len(added)
+                names = ", ".join(t.replace("_", " ") for t in added)
+                print(f"{contract.title}: found {names} (waiting for review)")
+        session.commit()
+        print(f"{total} new term(s) found. Review them in the Review tab.")

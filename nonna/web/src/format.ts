@@ -1,6 +1,14 @@
 // Shared helpers for showing contract data in a readable way
 
-export type ClauseType = 'liability_cap' | 'payment_terms' | 'governing_law' | 'indemnification' | 'term_renewal'
+export type ClauseType =
+  | 'liability_cap'
+  | 'payment_terms'
+  | 'governing_law'
+  | 'indemnification'
+  | 'term_renewal'
+  | 'termination_convenience'
+  | 'confidentiality'
+  | 'insurance'
 
 export interface Term {
   term_key: string
@@ -14,6 +22,9 @@ export const CLAUSE_LABELS: Record<ClauseType, string> = {
   governing_law: 'Governing law',
   indemnification: 'Indemnification',
   term_renewal: 'Term and renewal',
+  termination_convenience: 'Termination for convenience',
+  confidentiality: 'Confidentiality period',
+  insurance: 'Insurance minimums',
 }
 
 // What each term means, for someone who isn't a lawyer (hover hints and the one-pager)
@@ -23,6 +34,9 @@ export const CLAUSE_MEANINGS: Record<ClauseType, string> = {
   governing_law: "Which state's law applies if there's a dispute",
   indemnification: "Who covers the other side's costs if someone else sues",
   term_renewal: 'How long the agreement lasts, and whether it renews on its own',
+  termination_convenience: 'Who can end the agreement without giving a reason, and how much warning they have to give',
+  confidentiality: 'How long both sides have to keep each other’s information secret after the agreement ends',
+  insurance: 'The minimum insurance the vendor has to carry, so there’s money to cover it if something goes wrong',
 }
 
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -92,6 +106,43 @@ export function describeTerms(clauseType: string, terms: Term[]): string | null 
         const parts = [length, renewal != null ? `renews every ${describeMonths(Number(renewal))}` : 'renews automatically']
         if (notice != null) parts.push(`${Number(notice)} days' notice`)
         return parts.join(', ')
+      }
+      case 'termination_convenience': {
+        const who = term('who_may_terminate')?.value
+        const notice = term('notice_days')?.value
+        const label =
+          who === 'either' ? 'Either side' : who === 'aurelia' ? 'Only us' : who === 'vendor' ? 'Only the vendor' : null
+        if (!label && notice == null) return null
+        const days = notice == null ? null : Number(notice) === 0 ? 'immediately' : `${Number(notice)} days' notice`
+        return [label ?? 'Termination for convenience', days].filter(Boolean).join(', ')
+      }
+      case 'confidentiality': {
+        const years = term('survival_years')?.value
+        const forever = term('perpetual')?.value === true
+        if (!forever && years == null) return null
+        const length = forever ? 'Forever' : `${Number(years)} ${Number(years) === 1 ? 'year' : 'years'} after it ends`
+        return term('trade_secrets_indefinite')?.value === true
+          ? `${length}, trade secrets for as long as they stay secret`
+          : length
+      }
+      case 'insurance': {
+        const money = (key: string) => {
+          const t = term(key)
+          if (!t || t.value === null) return null
+          return Number(t.value).toLocaleString('en-US', {
+            style: 'currency',
+            currency: t.unit && t.unit.length === 3 ? t.unit : 'USD',
+            maximumFractionDigits: 0,
+          })
+        }
+        const occurrence = money('general_liability_per_occurrence')
+        const aggregate = money('general_liability_aggregate')
+        if (occurrence) return `General liability ${occurrence} per occurrence${aggregate ? ` / ${aggregate} aggregate` : ''}`
+        if (aggregate) return `General liability ${aggregate} aggregate`
+        const products = money('products_liability_limit')
+        if (products) return `Products liability ${products}`
+        const professional = money('professional_liability_limit')
+        return professional ? `Professional liability ${professional}` : null
       }
       default:
         return null

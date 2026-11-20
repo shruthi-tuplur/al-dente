@@ -316,6 +316,9 @@ FILTERS_FOR_TYPE = {
     "payment_terms": {"net_days_min", "net_days_max", "payment_structure"},
     "governing_law": {"jurisdiction"},
     "indemnification": {"is_mutual", "covers_ip_infringement"},
+    "termination_convenience": {"notice_days_max", "who_may_terminate"},
+    "confidentiality": {"survival_years_min", "survival_years_max"},
+    "insurance": {"general_liability_below", "general_liability_at_least"},
 }
 
 
@@ -347,6 +350,19 @@ def describe_filters(clause_type: str, f: VendorFilter) -> str:
         parts.append("mutual" if f.is_mutual else "one-way")
     if f.covers_ip_infringement is not None:
         parts.append("covers IP infringement" if f.covers_ip_infringement else "doesn't cover IP infringement")
+    if f.who_may_terminate:
+        parts.append({"either": "either side can terminate", "aurelia": "only we can terminate",
+                      "vendor": "only the vendor can terminate"}[f.who_may_terminate])
+    if f.notice_days_max is not None:
+        parts.append(f"{f.notice_days_max} days' notice or less")
+    if f.survival_years_min is not None:
+        parts.append(f"confidentiality lasting at least {f.survival_years_min} years")
+    if f.survival_years_max is not None:
+        parts.append(f"confidentiality lasting at most {f.survival_years_max} years")
+    if f.general_liability_below is not None:
+        parts.append(f"general liability below {_money(f.general_liability_below)} per occurrence")
+    if f.general_liability_at_least is not None:
+        parts.append(f"general liability of at least {_money(f.general_liability_at_least)} per occurrence")
     if f.applies_to:
         parts.append(f"{f.applies_to}s only")
     return ", ".join(parts) or "every vendor"
@@ -383,6 +399,35 @@ def _matches(values: dict, unit: str | None, f: VendorFilter) -> bool | None:
         return False
     if f.covers_ip_infringement is not None and values.get("covers_ip_infringement") is not f.covers_ip_infringement:
         return False
+
+    # Termination for convenience
+    if f.notice_days_max is not None:
+        notice = values.get("notice_days")
+        if notice is None or notice > f.notice_days_max:
+            return False
+    if f.who_may_terminate and values.get("who_may_terminate") != f.who_may_terminate:
+        return False
+
+    # Confidentiality: perpetual counts as longer than any number of years
+    if f.survival_years_min is not None or f.survival_years_max is not None:
+        perpetual = values.get("perpetual") is True
+        years = values.get("survival_years")
+        if f.survival_years_min is not None and not perpetual and (years is None or years < f.survival_years_min):
+            return False
+        if f.survival_years_max is not None and (perpetual or years is None or years > f.survival_years_max):
+            return False
+
+    # Insurance: per-occurrence general liability, in USD only
+    if f.general_liability_below is not None or f.general_liability_at_least is not None:
+        amount = values.get("general_liability_per_occurrence")
+        if amount is None:
+            return False
+        if (unit or "USD") != "USD":
+            return None
+        if f.general_liability_below is not None and not amount < f.general_liability_below:
+            return False
+        if f.general_liability_at_least is not None and not amount >= f.general_liability_at_least:
+            return False
     return True
 
 
@@ -419,7 +464,8 @@ def compare_vendors(session: Session, clause_type: str, f: VendorFilter) -> Vend
         with_position.add(p.counterparty_id)
         clause = p.baseline_clause
         values = {t.term_key: t.value for t in clause.terms}
-        unit = next((t.unit for t in clause.terms if t.term_key == "cap_amount"), None)
+        money_key = "general_liability_per_occurrence" if clause_type == "insurance" else "cap_amount"
+        unit = next((t.unit for t in clause.terms if t.term_key == money_key), None)
         result = _matches(values, unit, f)
         if result is None:
             not_comparable.add(p.counterparty.name)

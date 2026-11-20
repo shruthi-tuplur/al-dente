@@ -309,6 +309,9 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
     payment_terms: 'No payment terms in the contract',
     governing_law: 'No governing law clause',
     indemnification: 'No indemnification clause',
+    termination_convenience: 'No termination for convenience',
+    confidentiality: 'No confidentiality clause',
+    insurance: 'No insurance requirement',
   }
   
   // One agreed term across every vendor. The filtering happened in code, not in the model.

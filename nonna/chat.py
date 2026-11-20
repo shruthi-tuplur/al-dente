@@ -43,8 +43,13 @@ them wrong. The stored value is the corrected one. If the history shows what was
 can mention the original value and the attorney's note.
 - You cannot approve, reject, or change anything. If asked, say the attorney can do it from \
 the review card.
-- Nonna tracks four key terms in depth: liability caps, indemnification, payment terms, and \
-governing law. Those have extracted values, attorney review, and agreed baselines.
+- Nonna tracks seven key terms in depth: liability caps, indemnification, payment terms, \
+governing law, termination for convenience (who can walk away without a reason, and the notice), \
+confidentiality period (how long it lasts after the agreement ends, and whether trade secrets \
+are protected for as long as they stay secret), and insurance minimums (general liability per \
+occurrence and aggregate, products and professional liability). Those have extracted values, \
+attorney review, and agreed baselines. In who_may_terminate, "aurelia" means only Aurelia (us) \
+can terminate, "vendor" means only the vendor can, and "either" means both sides can.
 - Nonna also tracks each contract's term and renewal (term_renewal): its length, whether it \
 renews automatically, and the notice needed to stop it. Each contract has its own term, so \
 there's no vendor-wide baseline for it.
@@ -53,8 +58,8 @@ there's no vendor-wide baseline for it.
 code, so never calculate or adjust a date yourself. Give the date to act by and the contract. \
 Mention any contracts whose term is still waiting for review or isn't on file. Remind the user \
 that the dates are estimates from the reviewed term and should be confirmed against the contract.
-- Every other clause (confidentiality, termination, IP, insurance, force majeure, notices, and \
-so on) is filed by topic exactly as written. Use list_clause_topics to see what's on file and \
+- Every other clause (termination for cause, IP, force majeure, notices, the rest of the \
+confidentiality and insurance wording, and so on) is filed by topic exactly as written. Use list_clause_topics to see what's on file and \
 get_section_text to pull the wording. These are not reviewed and have no agreed baseline, so \
 say "here's what the contract says", never "this is what was agreed". If several contracts \
 have the clause, mention which ones and their dates, and don't decide which one controls.
@@ -269,6 +274,31 @@ TOOLS: list[dict[str, Any]] = [
                 "jurisdiction": {"type": "string", "description": "Governing law, like Delaware or New York."},
                 "is_mutual": {"type": "boolean", "description": "Indemnification goes both ways."},
                 "covers_ip_infringement": {"type": "boolean", "description": "Indemnification covers IP infringement."},
+                "notice_days_max": {
+                    "type": "integer",
+                    "description": "Termination for convenience on this many days' notice or less.",
+                },
+                "who_may_terminate": {
+                    "type": "string",
+                    "enum": ["either", "aurelia", "vendor"],
+                    "description": "Who can terminate for convenience: either side, only Aurelia (us), or only the vendor.",
+                },
+                "survival_years_min": {
+                    "type": "integer",
+                    "description": "Confidentiality lasting at least this many years after the agreement ends (forever counts).",
+                },
+                "survival_years_max": {
+                    "type": "integer",
+                    "description": "Confidentiality lasting at most this many years after the agreement ends.",
+                },
+                "general_liability_below": {
+                    "type": "number",
+                    "description": "General liability insurance strictly under this USD amount per occurrence.",
+                },
+                "general_liability_at_least": {
+                    "type": "number",
+                    "description": "General liability insurance of at least this USD amount per occurrence.",
+                },
                 "applies_to": {
                     "type": "string",
                     "enum": ["MSA", "SOW", "NDA"],
@@ -417,6 +447,9 @@ CLAUSE_LABELS = {
     "payment_terms": "Payment terms",
     "governing_law": "Governing law",
     "term_renewal": "Term and renewal",
+    "termination_convenience": "Termination for convenience",
+    "confidentiality": "Confidentiality period",
+    "insurance": "Insurance minimums",
 }
 
 
