@@ -9,9 +9,10 @@ import OnePager from './OnePager'
 import { PlaybookNote } from './Playbook'
 import TermLabel from './TermLabel'
 import WhichTermControls from './TermControls'
+import { NotesStrip, NotesTab } from './RelationshipNotes'
 import AsAmended from './AsAmended'
 import DraftTab from './Draft'
-import { fetchCounterparties, fetchLibrary } from './nonnaApi'
+import { fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
 import type {
   ContractType,
   CounterpartyLibrary,
@@ -21,6 +22,7 @@ import type {
   LibrarySection,
   Draft,
   PlaybookAssessment,
+  RelationshipNotes,
 } from './nonnaApi'
 
 const GROUPS: { type: ContractType; label: string }[] = [
@@ -348,7 +350,9 @@ export default function Library({
   const [vendors, setVendors] = useState<CounterpartySummary[] | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(openDraft?.counterparty_id ?? null)
   const [library, setLibrary] = useState<CounterpartyLibrary | null>(null)
-  const [tab, setTab] = useState<'contracts' | 'clauses' | 'draft'>(openDraft ? 'draft' : 'contracts')
+  const [tab, setTab] = useState<'contracts' | 'clauses' | 'notes' | 'draft'>(openDraft ? 'draft' : 'contracts')
+  const [notesData, setNotesData] = useState<RelationshipNotes | null>(null)
+  const [notesVersion, setNotesVersion] = useState(0)
   const [error, setError] = useState('')
   const [showOnePager, setShowOnePager] = useState(false)
 
@@ -379,6 +383,18 @@ export default function Library({
     }
   }, [selectedId])
 
+  // The team's notes about this vendor (reloaded after adding or archiving one)
+  useEffect(() => {
+    if (selectedId === null) return
+    let current = true
+    fetchNotes(selectedId)
+      .then((data) => current && setNotesData(data))
+      .catch(() => current && setNotesData(null))
+    return () => {
+      current = false
+    }
+  }, [selectedId, notesVersion])
+
   // Reload after a correction, without clearing the page
   function refresh() {
     if (selectedId === null) return
@@ -396,6 +412,8 @@ export default function Library({
   // Only vendors with an SOW on file can have a new one drafted
   const canDraft = library?.contracts.some(({ contract }) => contract.contract_type === 'SOW') ?? false
   const shownTab = tab === 'draft' && !canDraft ? 'contracts' : tab
+  // Only show notes that belong to the vendor on screen (not the last one, mid-switch)
+  const notes = notesData && library && notesData.counterparty_id === library.counterparty.id ? notesData : null
 
   return (
     <div className="library">
@@ -437,6 +455,7 @@ export default function Library({
                 One-pager
               </button>
             </div>
+            {notes && <NotesStrip data={notes} onOpen={() => setTab('notes')} />}
             {showOnePager && <OnePager library={library} onClose={() => setShowOnePager(false)} />}
             <WhichTermControls counterpartyId={library.counterparty.id} reloadKey={library} />
 
@@ -459,6 +478,15 @@ export default function Library({
               >
                 Clauses
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={shownTab === 'notes'}
+                className={shownTab === 'notes' ? 'lib-tab lib-tab-active' : 'lib-tab'}
+                onClick={() => setTab('notes')}
+              >
+                Notes{notes && notes.notes.length > 0 ? ` (${notes.notes.length})` : ''}
+              </button>
               {canDraft && (
                 <button
                   type="button"
@@ -474,6 +502,7 @@ export default function Library({
 
             {shownTab === 'contracts' && <ContractsTab library={library} agreed={agreed} onChanged={refresh} />}
             {shownTab === 'clauses' && <ClausesTab library={library} agreed={agreed} onChanged={refresh} />}
+            {shownTab === 'notes' && notes && <NotesTab data={notes} onChanged={() => setNotesVersion((n) => n + 1)} />}
             {/* Kept mounted so a draft isn't lost when switching tabs */}
             {canDraft && (
               <div hidden={shownTab !== 'draft'}>

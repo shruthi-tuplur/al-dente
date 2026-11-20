@@ -16,6 +16,7 @@ export type CardType =
   | 'playbook'
   | 'draft'
   | 'precedence'
+  | 'notes'
 
 export interface Card {
   type: CardType
@@ -520,6 +521,58 @@ export async function withdrawPlaybookException(exceptionId: number, note: strin
     body: JSON.stringify({ withdrawn_by: CURRENT_USER, note }),
   })
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't withdraw that exception."))
+}
+
+
+// ---------------------------------------------------------------------------
+// Relationship notes: what the team knows that isn't in any contract
+// ---------------------------------------------------------------------------
+
+export type NoteTopic = 'negotiation' | 'people' | 'timing' | 'other'
+
+export interface RelationshipNote {
+  id: number
+  topic: NoteTopic
+  topic_label: string
+  body: string
+  written_by: string
+  written_at: string
+  archived_at: string | null
+  archived_by: string | null
+}
+
+export interface RelationshipNotes {
+  counterparty_id: number
+  counterparty_name: string
+  notes: RelationshipNote[] // active, newest first
+  archived: RelationshipNote[]
+}
+
+export async function fetchNotes(counterpartyId: number): Promise<RelationshipNotes> {
+  const response = await fetch(`/api/counterparties/${counterpartyId}/notes`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load the team's notes."))
+  return (await response.json()) as RelationshipNotes
+}
+
+export async function addNote(counterpartyId: number, topic: NoteTopic, body: string): Promise<RelationshipNote> {
+  const response = await fetch(`/api/counterparties/${counterpartyId}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, body, written_by: CURRENT_USER }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't save that note."))
+  return (await response.json()) as RelationshipNote
+}
+
+// Archive a note. It stays in the history, it just stops showing as current.
+export async function archiveNote(noteId: number): Promise<RelationshipNote> {
+  const response = await fetch(`/api/notes/${noteId}/archive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ archived_by: CURRENT_USER }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't archive that note."))
+  return (await response.json()) as RelationshipNote
 }
 
 

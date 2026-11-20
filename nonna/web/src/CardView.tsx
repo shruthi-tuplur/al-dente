@@ -11,6 +11,7 @@ import { DraftSummaryCard } from './Draft'
 import GoogleCalendarBar from './GoogleCalendar'
 import { PlaybookMatrix, PlaybookNote } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
+import { NotesCard } from './RelationshipNotes'
 import { PrecedenceList } from './TermControls'
 import TermLabel from './TermLabel'
 import {
@@ -19,7 +20,7 @@ import {
   formatDate,
 } from './format'
 import type { Term } from './format'
-import type { AmendedContract, Card, Draft, PlaybookCheck, PrecedenceReport } from './nonnaApi'
+import type { AmendedContract, Card, Draft, PlaybookCheck, PrecedenceReport, RelationshipNotes } from './nonnaApi'
 
 interface Source {
   id: number
@@ -571,6 +572,12 @@ export default function CardView({ card, onOpenDraft }: { card: Card; onOpenDraf
       break
     case 'playbook':
       body = <PlaybookMatrix data={card.data as PlaybookCheck} />
+      break
+    case 'notes':
+      body = <NotesCard data={card.data as RelationshipNotes} />
+      break
+    case 'precedence':
+      body = <PrecedenceList report={card.data as PrecedenceReport} />
       break
     case 'draft':
       body = <DraftSummaryCard draft={card.data as Draft} onOpen={onOpenDraft} />

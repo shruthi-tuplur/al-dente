@@ -12,6 +12,7 @@ BEGIN;
 -- Hide "does not exist, skipping" notices on a fresh database
 SET LOCAL client_min_messages TO warning;
 
+DROP TABLE IF EXISTS relationship_notes CASCADE;
 DROP TABLE IF EXISTS precedence_decisions CASCADE;
 DROP TABLE IF EXISTS playbook_exceptions CASCADE;
 DROP TABLE IF EXISTS playbook_rules CASCADE;
@@ -28,6 +29,7 @@ DROP FUNCTION IF EXISTS prevent_review_decision_changes() CASCADE;
 DROP FUNCTION IF EXISTS check_position_baseline() CASCADE;
 DROP FUNCTION IF EXISTS protect_playbook_exceptions() CASCADE;
 DROP FUNCTION IF EXISTS prevent_precedence_decision_changes() CASCADE;
+DROP FUNCTION IF EXISTS protect_relationship_notes() CASCADE;
 
 
 -- ---------------------------------------------------------------------------
@@ -367,4 +369,46 @@ CREATE TRIGGER precedence_decisions_append_only
     BEFORE UPDATE OR DELETE ON precedence_decisions
     FOR EACH ROW EXECUTE FUNCTION prevent_precedence_decision_changes();
 
+
+-- Relationship notes: what the team knows about a vendor that isn't in any contract.
+-- Never edited or deleted, only archived once.
+CREATE TABLE relationship_notes (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    counterparty_id  BIGINT NOT NULL REFERENCES counterparties (id) ON DELETE CASCADE,
+    topic            TEXT NOT NULL DEFAULT 'other'
+                     CHECK (topic IN ('negotiation', 'people', 'timing', 'other')),
+    body             TEXT NOT NULL CHECK (btrim(body) <> '' AND length(body) <= 1000),
+    written_by       TEXT NOT NULL,
+    written_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    archived_at      TIMESTAMPTZ,
+    archived_by      TEXT,
+    CHECK ((archived_at IS NULL) = (archived_by IS NULL))
+);
+
+CREATE INDEX relationship_notes_counterparty_idx ON relationship_notes (counterparty_id);
+
+-- The only change allowed is archiving a note, once. Deleting the vendor still removes its notes.
+CREATE FUNCTION protect_relationship_notes() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF NOT EXISTS (SELECT 1 FROM counterparties WHERE id = OLD.counterparty_id) THEN
+            RETURN OLD;  -- the vendor itself is being deleted
+        END IF;
+        RAISE EXCEPTION 'Relationship notes are kept for the record. Archive it instead of deleting it.';
+    END IF;
+    IF OLD.archived_at IS NOT NULL THEN
+        RAISE EXCEPTION 'This note was already archived.';
+    END IF;
+    IF (NEW.counterparty_id, NEW.topic, NEW.body, NEW.written_by, NEW.written_at)
+       IS DISTINCT FROM
+       (OLD.counterparty_id, OLD.topic, OLD.body, OLD.written_by, OLD.written_at) THEN
+        RAISE EXCEPTION 'Notes can''t be edited. Archive it and add a new one.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER relationship_notes_kept
+    BEFORE UPDATE OR DELETE ON relationship_notes
+    FOR EACH ROW EXECUTE FUNCTION protect_relationship_notes();
 COMMIT;

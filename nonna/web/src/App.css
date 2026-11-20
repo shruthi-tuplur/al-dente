@@ -2518,3 +2518,181 @@
     justify-self: start;
   }
 }
+
+
+/* Relationship notes: what the team knows that isn't in any contract */
+.notes-strip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border: 1px solid #efeae3;
+  border-radius: 10px;
+  background: #fbfaf7;
+}
+
+.notes-strip ul {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 420px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes-strip li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.notes-strip-body {
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--espresso);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-strip .lib-fix,
+.notes-strip-empty .lib-fix {
+  margin-top: 0;
+}
+
+.notes-strip-empty {
+  justify-content: flex-start;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.note-topic {
+  flex: none;
+  padding: 1px 9px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: #f1ece5;
+  color: var(--espresso-muted);
+}
+
+.note-topic-negotiation {
+  background: rgba(139, 28, 22, 0.08);
+  color: var(--nonna-red);
+}
+
+.note-topic-people {
+  background: rgba(82, 94, 53, 0.1);
+  color: var(--basil);
+}
+
+.note-topic-timing {
+  background: rgba(224, 176, 94, 0.22);
+  color: #7a5717;
+}
+
+.notes-tab {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.notes-tab .playbook-intro {
+  margin: 0;
+}
+
+.note-add {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid #efeae3;
+  border-radius: 12px;
+  background: var(--warm-white);
+}
+
+.note-add .intake-error,
+.note-add .intake-actions {
+  margin: 0;
+}
+
+.note-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--espresso-muted);
+}
+
+.note-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.note-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note-item {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #efeae3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.note-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--espresso);
+  white-space: pre-wrap;
+}
+
+.note-meta {
+  margin: 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--espresso-muted);
+}
+
+.note-actions {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.note-actions .lib-fix {
+  margin-top: 0;
+}
+
+.note-confirm {
+  font-size: 13px;
+  color: var(--espresso);
+}
+
+.note-cancel {
+  color: var(--espresso-muted);
+}
+
+.note-archived {
+  background: #fbfaf7;
+  opacity: 0.8;
+}
+
+.note-archive .note-list {
+  margin-top: 10px;
+}

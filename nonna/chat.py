@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import amendments, deadlines, drafting, lookups, playbook, precedence
+from nonna import amendments, deadlines, drafting, lookups, notes, playbook, precedence
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
@@ -59,6 +59,12 @@ get_section_text to pull the wording. These are not reviewed and have no agreed 
 say "here's what the contract says", never "this is what was agreed". If several contracts \
 have the clause, mention which ones and their dates, and don't decide which one controls.
 - If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts.
+- Relationship notes are what the team knows about a vendor that isn't in any contract ("they \
+always fight us on IP", "business owner is in CMC", "renegotiating in Q2"). Use \
+get_relationship_notes when someone asks what to know before talking to a vendor, how a vendor \
+negotiates, who to talk to, or what's coming up. They're the team's own notes, not contract \
+terms: say "your team noted" with who and when, and never present a note as something agreed. \
+Only active notes count. Nonna can't write notes from chat; people add them in the Library.
 - For "which term controls?", or when an SOW and the MSA disagree on a key term ("SOW 2 says \
 net 60 but the MSA says net 45"), use check_precedence. It lines up both terms, the MSA's \
 order-of-precedence clause, and whether the SOW names the MSA section and says it supersedes \
@@ -347,6 +353,18 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "get_relationship_notes",
+        "description": (
+            "The team's relationship notes about one vendor: how they negotiate, the people "
+            "involved, and timing or plans. Not contract terms. Active notes only, newest first."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"counterparty_id": {"type": "integer"}},
+            "required": ["counterparty_id"],
+        },
+    },
+    {
         "name": "check_precedence",
         "description": (
             "Which term controls when a vendor's SOW (or change order) says something different "
@@ -389,6 +407,7 @@ STATUS_FOR_TOOL = {
     "get_contract_as_amended": "Read it with the amendments applied",
     "check_playbook": "Checked against our playbook",
     "check_precedence": "Lined up the SOW and the MSA",
+    "get_relationship_notes": "Read the team's notes",
     "draft_sow": "Drafted from what you've agreed",
 }
 
@@ -555,6 +574,12 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         names = [r["counterparty_name"] for r in data["rows"]]
         title = f"{names[0]} vs our playbook" if tool_input.get("counterparty_id") and names else "Vendors vs our playbook"
         _add_card(cards, Card(type="playbook", title=title, data=data))
+        return data
+
+    if name == "get_relationship_notes":
+        result = notes.get_notes(session, tool_input["counterparty_id"], include_archived=False)
+        data = result.model_dump(mode="json")
+        _add_card(cards, Card(type="notes", title=f"Team notes: {result.counterparty_name}", data=data))
         return data
 
     if name == "check_precedence":

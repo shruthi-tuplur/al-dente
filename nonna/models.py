@@ -323,3 +323,26 @@ class PrecedenceDecision(Base):
 
     def __repr__(self) -> str:
         return f"<PrecedenceDecision {self.controls} controls for clause {self.sow_clause_id}>"
+
+
+    
+
+class RelationshipNote(Base):
+    """What the team knows about a vendor that isn't in any contract.
+
+    Never edited or deleted (Postgres blocks it). Retire one by archiving it once.
+    """
+
+    __tablename__ = "relationship_notes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    counterparty_id: Mapped[int] = mapped_column(ForeignKey("counterparties.id", ondelete="CASCADE"))
+    topic: Mapped[str] = mapped_column(Text, server_default="other")  # negotiation, people, timing, other
+    body: Mapped[str] = mapped_column(Text)
+    written_by: Mapped[str] = mapped_column(Text)
+    written_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, server_default=func.now())
+    archived_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ)
+    archived_by: Mapped[str | None] = mapped_column(Text)
+
+    def __repr__(self) -> str:
+        return f"<RelationshipNote {self.topic} for counterparty {self.counterparty_id}>"

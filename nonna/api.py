@@ -17,7 +17,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
 from nonna import (
     amendments, chat, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar, intake, lookups,
-    playbook, precedence, reviews, sections,
+    notes, playbook, precedence, reviews, sections,
 )
 from nonna.database import get_session
 from nonna.models import Clause, Contract
@@ -419,6 +419,35 @@ def get_contract_as_amended(contract_id: int, session: SessionDep) -> amendments
 def get_playbook(session: SessionDep, counterparty_id: int | None = None) -> playbook.PlaybookCheck:
     """Aurelia's playbook, and how every vendor's agreed terms measure up against it."""
     return playbook.check_vendors(session, counterparty_id)
+
+@app.get("/counterparties/{counterparty_id}/notes", response_model=notes.NotesOut)
+def get_relationship_notes(counterparty_id: int, session: SessionDep) -> notes.NotesOut:
+    """The team's notes about a vendor: active ones first, then archived ones."""
+    try:
+        return notes.get_notes(session, counterparty_id)
+    except notes.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+
+
+@app.post("/counterparties/{counterparty_id}/notes", response_model=notes.NoteOut, status_code=status.HTTP_201_CREATED)
+def add_relationship_note(counterparty_id: int, note: notes.NoteIn, session: SessionDep) -> notes.NoteOut:
+    try:
+        return notes.add_note(session, counterparty_id, note)
+    except notes.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except notes.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
+
+
+@app.post("/notes/{note_id}/archive", response_model=notes.NoteOut)
+def archive_relationship_note(note_id: int, change: notes.ArchiveIn, session: SessionDep) -> notes.NoteOut:
+    """Archive a note. It stays in the history, it just stops showing as current."""
+    try:
+        return notes.archive_note(session, note_id, change)
+    except notes.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except notes.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
 
 
 @app.get("/counterparties/{counterparty_id}/precedence", response_model=precedence.PrecedenceReport)
