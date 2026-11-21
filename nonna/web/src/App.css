@@ -2855,3 +2855,57 @@
   font-style: italic;
   color: var(--espresso-muted);
 }
+
+
+/* Fixing upload mistakes */
+.fix-contract {
+  margin-bottom: 12px;
+  background: var(--warm-white);
+}
+
+.fix-contract .correction-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.fix-contract .fix-title {
+  grid-column: 1 / -1;
+}
+
+.fix-contract .note-hint,
+.fix-contract .intake-error,
+.fix-contract .intake-actions {
+  margin: 0;
+}
+
+.fix-actions {
+  align-items: center;
+}
+
+.fix-actions .fix-delete {
+  margin: 0 0 0 auto;
+  color: var(--nonna-red);
+}
+
+.fix-delete-confirm {
+  display: grid;
+  gap: 10px;
+}
+
+.fix-delete-confirm .review-conflict {
+  margin: 0;
+}
+
+.btn-danger {
+  background: var(--nonna-red);
+  border: 1px solid var(--nonna-red);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  background: #6f1611;
+}
+
+.fix-message {
+  margin: 16px 0 0;
+}

@@ -346,3 +346,27 @@ class RelationshipNote(Base):
 
     def __repr__(self) -> str:
         return f"<RelationshipNote {self.topic} for counterparty {self.counterparty_id}>"
+
+
+    
+
+class ContractFix(Base):
+    """One fix to an upload's details, or an upload deleted by mistake. Append-only.
+
+    Keeps the contract's title as text (and no foreign key), so the record survives a delete.
+    """
+
+    __tablename__ = "contract_fixes"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    counterparty_id: Mapped[int] = mapped_column(ForeignKey("counterparties.id", ondelete="CASCADE"))
+    contract_id: Mapped[int | None] = mapped_column(BigInteger)
+    contract_title: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(Text)  # edited, moved_in, moved_out, deleted
+    changes: Mapped[dict | None] = mapped_column(JSONB)
+    note: Mapped[str] = mapped_column(Text)
+    changed_by: Mapped[str] = mapped_column(Text)
+    changed_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, server_default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<ContractFix {self.action} {self.contract_title!r}>"

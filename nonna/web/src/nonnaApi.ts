@@ -366,6 +366,46 @@ export async function fetchCounterparties(): Promise<CounterpartySummary[]> {
   return (await response.json()) as CounterpartySummary[]
 }
 
+// ---------------------------------------------------------------------------
+// Fixing upload mistakes
+// ---------------------------------------------------------------------------
+
+export interface ContractFix {
+  title: string
+  contract_type: ContractType
+  effective_date: string // YYYY-MM-DD
+  counterparty_id: number
+  linked_contract_id: number | null // the MSA an SOW falls under, or what an amendment amends
+  note: string
+}
+
+export interface FixOutcome {
+  contract_id: number | null
+  counterparty_id: number
+  message: string
+  reread: boolean
+}
+
+export async function fixContract(contractId: number, fix: ContractFix): Promise<FixOutcome> {
+  const response = await fetch(`/api/contracts/${contractId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...fix, changed_by: CURRENT_USER }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't save that fix."))
+  return (await response.json()) as FixOutcome
+}
+
+export async function deleteContract(contractId: number, note: string): Promise<FixOutcome> {
+  const response = await fetch(`/api/contracts/${contractId}/delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note, changed_by: CURRENT_USER }),
+  })
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't delete that upload."))
+  return (await response.json()) as FixOutcome
+}
+
 export async function fetchLibrary(counterpartyId: number): Promise<CounterpartyLibrary> {
   const response = await fetch(`/api/counterparties/${counterpartyId}/library`)
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load that vendor."))

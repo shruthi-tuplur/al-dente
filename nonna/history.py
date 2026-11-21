@@ -1,11 +1,12 @@
 """Decision history: everything anyone decided about a vendor, in one timeline.
 
-Nonna already keeps every decision as a permanent record, in five places:
+Nonna already keeps every decision as a permanent record, in six places:
 - contracts (who uploaded what, and when)
 - review_decisions (approvals, intentional changes, corrections, rejections)
 - playbook_exceptions (GC sign-offs, and withdrawals)
 - precedence_decisions (which term controls when an SOW and the MSA disagree)
 - relationship_notes (notes added, and archived)
+- contract_fixes (upload details fixed, contracts moved between vendors, uploads deleted)
 
 This module only reads them and lines them up, newest first. Nothing here writes, and no AI
 is involved: it's an audit trail, so every line comes straight from the database.
@@ -24,7 +25,8 @@ from sqlalchemy.orm import Session, selectinload
 from nonna import playbook
 from nonna.lookups import NotFound, to_source
 from nonna.models import (
-    Clause, Contract, Counterparty, PlaybookException, PrecedenceDecision, RelationshipNote, ReviewDecision,
+    Clause, Contract, ContractFix, Counterparty, PlaybookException, PrecedenceDecision, RelationshipNote,
+    ReviewDecision,
 )
 from nonna.notes import TOPIC_LABELS
 from nonna.reviews import CLAUSE_LABELS, CORRECTABLE_TERMS
@@ -36,6 +38,7 @@ Group = Literal["contracts", "reviews", "gc", "precedence", "notes"]
 Kind = Literal[
     "uploaded", "approved", "approved_change", "corrected", "rejected",
     "gc_exception", "gc_exception_withdrawn", "precedence_call", "note_added", "note_archived",
+    "contract_fixed", "contract_moved_in", "contract_moved_out", "contract_deleted",
 ]
 
 # Plain-English names for the values a correction can change
@@ -118,6 +121,18 @@ def _show(clause_type: str, key: str, raw: Any) -> str:
     if kind in units:
         return f"{number:,.0f} {units[kind]}"
     return f"{number:,.0f}" if number == number.to_integral() else str(number)
+
+
+def _show_fix(label: str, raw: Any) -> str:
+    """One fixed upload detail, in plain English."""
+    if raw in (None, ""):
+        return "None"
+    if label == "Effective date":
+        try:
+            return date.fromisoformat(str(raw)).strftime("%b %-d, %Y")
+        except ValueError:
+            return str(raw)
+    return str(raw)
 
 
 def get_history(session: Session, counterparty_id: int) -> DecisionHistory:
@@ -227,6 +242,25 @@ def get_history(session: Session, counterparty_id: int) -> DecisionHistory:
                 id=f"note-{n.id}-archived", kind="note_archived", group="notes", at=n.archived_at,
                 by=n.archived_by or "", title=f"Archived a note: {topic}", value=n.body,
             ))
+
+    # Upload fixes
+    fixes = session.scalars(select(ContractFix).where(ContractFix.counterparty_id == vendor.id)).all()
+    fix_titles = {
+        "edited": ("contract_fixed", "Fixed the details of"),
+        "moved_in": ("contract_moved_in", "Moved here:"),
+        "moved_out": ("contract_moved_out", "Moved to another vendor:"),
+        "deleted": ("contract_deleted", "Deleted the upload"),
+    }
+    for f in fixes:
+        kind, verb = fix_titles.get(f.action, ("contract_fixed", "Fixed"))
+        changes = [
+            Change(label=str(label), before=_show_fix(label, change.get("from")), after=_show_fix(label, change.get("to")))
+            for label, change in (f.changes or {}).items()
+        ]
+        events.append(HistoryEvent(
+            id=f"fix-{f.id}", kind=kind, group="contracts", at=f.changed_at, by=f.changed_by,
+            title=f"{verb} {f.contract_title}", changes=changes, note=f.note,
+        ))
 
     events.sort(key=lambda e: (e.at, e.id), reverse=True)
     counts: dict[str, int] = {}

@@ -33,6 +33,10 @@ How to answer:
 - Only state contract facts (amounts, terms, dates, jurisdictions, clause language) that came \
 from your tools in this conversation. Never guess, and never use outside knowledge about a \
 company's contracts.
+- Write dates the way people say them: "Nov 4, 2026" or "March 1, 2025", never "2026-11-04". \
+Tools send contract dates as YYYY-MM-DD: change the format only, never the day. For when \
+something happened in the decision history, use each event's "when" field as written (it's \
+already in local time). Don't work out times yourself from the UTC "at" field.
 - If the tools return nothing relevant, say plainly that Nonna has no record of it.
 - Cite the source for every fact: the contract title and section number.
 - Current positions already reflect amendments. When the history shows a change, say what \
@@ -67,8 +71,8 @@ have the clause, mention which ones and their dates, and don't decide which one 
 - If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts.
 - For "who decided what" about a vendor (who approved the cap, why something was changed, \
 what the GC signed off on, what happened recently), use get_decision_history. It's the \
-permanent record: uploads, approvals, corrections, rejections, GC exceptions, which-term-controls \
-calls, and notes. Quote who, when, and their reason exactly as recorded. Never add a reason \
+permanent record: uploads, upload fixes (details changed, moved between vendors, deleted), \
+approvals, corrections, rejections, GC exceptions, which-term-controls calls, and notes. Quote who, when, and their reason exactly as recorded. Never add a reason \
 nobody wrote. If the reason is blank, say no note was left.
 - Relationship notes are what the team knows about a vendor that isn't in any contract ("they \
 always fight us on IP", "business owner is in CMC", "renegotiating in Q2"). Use \
@@ -645,6 +649,12 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         limit = max(1, min(int(tool_input.get("limit") or 25), 100))
         result = result.model_copy(update={"events": events[:limit]})
         data = result.model_dump(mode="json")
+        # A ready-made local "when" (Nonna runs on the attorney's own computer), so the model
+        # never converts UTC itself and puts a 7 PM decision on the next day
+        for event, original in zip(data["events"], result.events):
+            local = original.at.astimezone()
+            data_when = f"{local.strftime('%b')} {local.day}, {local.year}, {local.strftime('%I:%M %p').lstrip('0')}"
+            event["when"] = data_when
         _add_card(cards, Card(type="decisions", title=f"Decision history: {result.counterparty_name}", data=data))
         return data
 

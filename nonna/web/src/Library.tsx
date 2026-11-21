@@ -11,6 +11,7 @@ import TermLabel from './TermLabel'
 import WhichTermControls from './TermControls'
 import { NotesStrip, NotesTab } from './RelationshipNotes'
 import DecisionHistoryTab from './DecisionHistory'
+import FixContract from './FixContract'
 import AsAmended from './AsAmended'
 import DraftTab from './Draft'
 import { fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
@@ -22,6 +23,7 @@ import type {
   LibraryContract,
   LibrarySection,
   Draft,
+  FixOutcome,
   PlaybookAssessment,
   RelationshipNotes,
 } from './nonnaApi'
@@ -126,12 +128,18 @@ function ClauseRow({
 function ContractsTab({
   library,
   agreed,
+  vendors,
   onChanged,
+  onFixed,
 }: {
   library: CounterpartyLibrary
   agreed: Status
+  vendors: CounterpartySummary[]
   onChanged: () => void
+  onFixed: () => void
 }) {
+  const [fixingId, setFixingId] = useState<number | null>(null)
+  const [fixMessage, setFixMessage] = useState('')
   const titles = new Map(library.contracts.map(({ contract }) => [contract.id, contract.title]))
   const amendmentCount = (id: number) =>
     library.contracts.filter(({ contract }) => contract.amends_contract_id === id).length
@@ -141,8 +149,15 @@ function ContractsTab({
     return `${c.amends_contract_id !== null ? 'Amends' : 'Falls under'} ${titles.get(parent) ?? 'another contract'}`
   }
 
+  function fixed(outcome: FixOutcome) {
+    setFixingId(null)
+    setFixMessage(outcome.message)
+    onFixed()
+  }
+
   return (
     <>
+      {fixMessage && <p className="review-done fix-message">✓ {fixMessage}</p>}
       {GROUPS.map(({ type, label }) => {
         const items = library.contracts.filter(({ contract }) => contract.contract_type === type)
         if (items.length === 0) return null
@@ -162,6 +177,26 @@ function ContractsTab({
                   {parentNote(contract) ? ` · ${parentNote(contract)}` : ''}
                   {contract.status !== 'active' ? ` · ${contract.status}` : ''}
                 </p>
+                {fixingId === contract.id ? (
+                  <FixContract
+                    contract={contract}
+                    library={library}
+                    vendors={vendors}
+                    onDone={fixed}
+                    onCancel={() => setFixingId(null)}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="lib-fix"
+                    onClick={() => {
+                      setFixMessage('')
+                      setFixingId(contract.id)
+                    }}
+                  >
+                    Fix upload details
+                  </button>
+                )}
                 <FullContract contractId={contract.id} />
                 {amendmentCount(contract.id) > 0 && (
                   <AsAmended contractId={contract.id} amendmentCount={amendmentCount(contract.id)} />
@@ -396,6 +431,13 @@ export default function Library({
     }
   }, [selectedId, notesVersion])
 
+  // Reload the vendor list (counts change when a contract moves or is deleted)
+  function reloadVendors() {
+    fetchCounterparties()
+      .then(setVendors)
+      .catch(() => undefined)
+  }
+
   // Reload after a correction, without clearing the page
   function refresh() {
     if (selectedId === null) return
@@ -510,7 +552,19 @@ export default function Library({
               )}
             </div>
 
-            {shownTab === 'contracts' && <ContractsTab library={library} agreed={agreed} onChanged={refresh} />}
+            {shownTab === 'contracts' && (
+              <ContractsTab
+                key={library.counterparty.id}
+                library={library}
+                agreed={agreed}
+                vendors={vendors ?? []}
+                onChanged={refresh}
+                onFixed={() => {
+                  refresh()
+                  reloadVendors()
+                }}
+              />
+            )}
             {shownTab === 'clauses' && <ClausesTab library={library} agreed={agreed} onChanged={refresh} />}
             {shownTab === 'notes' && notes && <NotesTab data={notes} onChanged={() => setNotesVersion((n) => n + 1)} />}
             {shownTab === 'history' && <DecisionHistoryTab counterpartyId={library.counterparty.id} reloadKey={library} />}

@@ -11,7 +11,7 @@ const GROUPS: { value: HistoryGroup | 'all'; label: string }[] = [
   { value: 'gc', label: 'GC exceptions' },
   { value: 'precedence', label: 'Which term controls' },
   { value: 'notes', label: 'Notes' },
-  { value: 'contracts', label: 'Uploads' },
+  { value: 'contracts', label: 'Uploads and fixes' },
 ]
 
 const ICONS: Record<HistoryEvent['kind'], string> = {
@@ -25,6 +25,10 @@ const ICONS: Record<HistoryEvent['kind'], string> = {
   precedence_call: '⚖',
   note_added: '✚',
   note_archived: '↓',
+  contract_fixed: '✎',
+  contract_moved_in: '→',
+  contract_moved_out: '←',
+  contract_deleted: '✕',
 }
 
 // Dates and times in the reader's own time zone (the API sends UTC)

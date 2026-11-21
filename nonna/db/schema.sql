@@ -12,6 +12,7 @@ BEGIN;
 -- Hide "does not exist, skipping" notices on a fresh database
 SET LOCAL client_min_messages TO warning;
 
+DROP TABLE IF EXISTS contract_fixes CASCADE;
 DROP TABLE IF EXISTS relationship_notes CASCADE;
 DROP TABLE IF EXISTS precedence_decisions CASCADE;
 DROP TABLE IF EXISTS playbook_exceptions CASCADE;
@@ -30,6 +31,7 @@ DROP FUNCTION IF EXISTS check_position_baseline() CASCADE;
 DROP FUNCTION IF EXISTS protect_playbook_exceptions() CASCADE;
 DROP FUNCTION IF EXISTS prevent_precedence_decision_changes() CASCADE;
 DROP FUNCTION IF EXISTS protect_relationship_notes() CASCADE;
+DROP FUNCTION IF EXISTS protect_contract_fixes() CASCADE;
 
 
 -- ---------------------------------------------------------------------------
@@ -414,4 +416,35 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER relationship_notes_kept
     BEFORE UPDATE OR DELETE ON relationship_notes
     FOR EACH ROW EXECUTE FUNCTION protect_relationship_notes();
+
+
+-- Fixing upload mistakes: every fix to a contract's details, and every upload deleted by mistake.
+-- Append-only.
+CREATE TABLE contract_fixes (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    counterparty_id  BIGINT NOT NULL REFERENCES counterparties (id) ON DELETE CASCADE,
+    contract_id      BIGINT,          -- no foreign key on purpose: a deleted upload keeps its record
+    contract_title   TEXT NOT NULL,
+    action           TEXT NOT NULL CHECK (action IN ('edited', 'moved_in', 'moved_out', 'deleted')),
+    changes          JSONB,           -- {"Type": {"from": "SOW", "to": "MSA"}, ...}
+    note             TEXT NOT NULL CHECK (btrim(note) <> ''),   -- why, in the attorney's words
+    changed_by       TEXT NOT NULL,
+    changed_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX contract_fixes_counterparty_idx ON contract_fixes (counterparty_id);
+
+-- Never edited or deleted. Deleting the whole vendor still removes its log.
+CREATE FUNCTION protect_contract_fixes() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'DELETE' AND NOT EXISTS (SELECT 1 FROM counterparties WHERE id = OLD.counterparty_id) THEN
+        RETURN OLD;  -- the vendor itself is being deleted
+    END IF;
+    RAISE EXCEPTION 'contract_fixes is append-only. Add a new fix instead of changing an old one.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER contract_fixes_append_only
+    BEFORE UPDATE OR DELETE ON contract_fixes
+    FOR EACH ROW EXECUTE FUNCTION protect_contract_fixes();
 COMMIT;

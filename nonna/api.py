@@ -16,8 +16,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
 from nonna import (
-    amendments, chat, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar, history, intake,
-    lookups, notes, playbook, precedence, reviews, sections,
+    amendments, chat, contract_fixes, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar,
+    history, intake, lookups, notes, playbook, precedence, reviews, sections,
 )
 from nonna.database import get_session
 from nonna.models import Clause, Contract
@@ -351,7 +351,26 @@ def extract_contract(contract_id: int, session: SessionDep) -> extraction.Extrac
     return result
 
 
+@app.put("/contracts/{contract_id}", response_model=contract_fixes.FixOutcome)
+def fix_contract(contract_id: int, fix: contract_fixes.FixIn, session: SessionDep) -> contract_fixes.FixOutcome:
+    """Fix an upload's details: title, type, date, vendor, or what it falls under. Needs a note."""
+    try:
+        return contract_fixes.fix_contract(session, contract_id, fix)
+    except contract_fixes.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except contract_fixes.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
 
+
+@app.post("/contracts/{contract_id}/delete", response_model=contract_fixes.FixOutcome)
+def delete_contract(contract_id: int, change: contract_fixes.DeleteIn, session: SessionDep) -> contract_fixes.FixOutcome:
+    """Delete an upload that was a mistake. Only before anything from it was reviewed."""
+    try:
+        return contract_fixes.delete_contract(session, contract_id, change)
+    except contract_fixes.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+    except contract_fixes.ReviewRejected as error:
+        raise HTTPException(422, str(error)) from error
 
 @app.get("/counterparties/{counterparty_id}/library", response_model=CounterpartyLibrary)
 def get_counterparty_library(counterparty_id: int, session: SessionDep) -> CounterpartyLibrary:
