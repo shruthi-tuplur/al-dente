@@ -8,10 +8,11 @@ import TermLabel from './TermLabel'
 import { NotesTab } from './RelationshipNotes'
 import DecisionHistoryTab from './DecisionHistory'
 import FixContract from './FixContract'
+import type { LibraryTarget } from './LibraryLink'
 import LibraryOverview from './LibraryOverview'
 import { ClauseRow } from './LibraryRows'
 import type { Status } from './LibraryRows'
-import { fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
+import { fetchContractText, fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
 import type {
   ContractType,
   CounterpartyLibrary,
@@ -41,6 +42,7 @@ function ContractCard({
   library,
   status,
   vendors,
+  target,
   onChanged,
   onFixed,
 }: {
@@ -49,10 +51,11 @@ function ContractCard({
   library: CounterpartyLibrary
   status: Status
   vendors: CounterpartySummary[]
+  target: LibraryTarget | null // set when chat linked here: open with the full text showing
   onChanged: () => void
   onFixed: (outcome: FixOutcome) => void
 }) {
-  const [panel, setPanel] = useState<Panel>(null)
+  const [panel, setPanel] = useState<Panel>(target ? 'full' : null)
   const titles = new Map(library.contracts.map(({ contract: c }) => [c.id, c.title]))
   const amendments = library.contracts.filter(({ contract: c }) => c.amends_contract_id === contract.id).length
   const parent = contract.parent_contract_id ?? contract.amends_contract_id
@@ -69,7 +72,7 @@ function ContractCard({
   const toggle = (next: Panel) => setPanel((current) => (current === next ? null : next))
 
   return (
-    <details className="lib-contract">
+    <details className="lib-contract" open={target !== null || undefined}>
       <summary>
         <span className="lib-contract-title">{contract.title}</span>
         <span className="card-meta">{formatDate(contract.effective_date)}</span>
@@ -95,7 +98,7 @@ function ContractCard({
 
       {panel !== null && (
         <div className="lib-panel">
-          {panel === 'full' && <FullContract contractId={contract.id} />}
+          {panel === 'full' && <FullContract contractId={contract.id} target={target} />}
           {panel === 'amended' && <AsAmended contractId={contract.id} />}
           {panel === 'fix' && (
             <FixContract
@@ -139,12 +142,14 @@ function ContractsTab({
   library,
   status,
   vendors,
+  target,
   onChanged,
   onFixed,
 }: {
   library: CounterpartyLibrary
   status: Status
   vendors: CounterpartySummary[]
+  target: LibraryTarget | null
   onChanged: () => void
   onFixed: () => void
 }) {
@@ -169,6 +174,7 @@ function ContractsTab({
                 library={library}
                 status={status}
                 vendors={vendors}
+                target={target?.contractId === contract.id ? target : null}
                 onChanged={onChanged}
                 onFixed={(outcome) => {
                   setFixMessage(outcome.message)
@@ -186,15 +192,20 @@ function ContractsTab({
 export default function Library({
   openDraft = null,
   onDraftOpened,
+  jumpTo = null,
+  onJumped,
 }: {
   openDraft?: Draft | null // a draft from chat to open straight away
   onDraftOpened?: () => void
+  jumpTo?: LibraryTarget | null // a source tapped in chat: open that contract at that section
+  onJumped?: () => void
 } = {}) {
   const [incoming] = useState(openDraft)
+  const [jump] = useState(jumpTo)
   const [vendors, setVendors] = useState<CounterpartySummary[] | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(openDraft?.counterparty_id ?? null)
   const [library, setLibrary] = useState<CounterpartyLibrary | null>(null)
-  const [tab, setTab] = useState<Tab>(openDraft ? 'draft' : 'overview')
+  const [tab, setTab] = useState<Tab>(openDraft ? 'draft' : jumpTo ? 'contracts' : 'overview')
   const [notesData, setNotesData] = useState<RelationshipNotes | null>(null)
   const [notesVersion, setNotesVersion] = useState(0)
   const [error, setError] = useState('')
@@ -224,11 +235,26 @@ export default function Library({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // A link from chat names a contract. Find which vendor it belongs to and open that vendor.
+  useEffect(() => {
+    if (!jump) return
+    onJumped?.()
+    let current = true
+    fetchContractText(jump.contractId)
+      .then((contract) => current && setSelectedId(contract.counterparty_id))
+      .catch(() => current && setError("That contract isn't in the library anymore. Pick a vendor on the left."))
+    return () => {
+      current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     fetchCounterparties()
       .then((list) => {
         setVendors(list)
-        if (list.length > 0) setSelectedId((id) => id ?? list[0].id)
+        // With a link from chat, wait for its vendor instead of opening the first one
+        if (list.length > 0 && !jump) setSelectedId((id) => id ?? list[0].id)
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Couldn't load your vendors."))
   }, [])
@@ -294,42 +320,42 @@ export default function Library({
 
   return (
     <div className={vendorsOpen ? 'library' : 'library library-collapsed'}>
-    <nav className="lib-vendors" aria-label="Vendors">
-      <div className="lib-vendors-head">
-        {vendorsOpen && <p className="card-section">Vendors</p>}
-        <button
-          type="button"
-          className="lib-vendors-toggle"
-          aria-expanded={vendorsOpen}
-          aria-label={vendorsOpen ? 'Hide the vendor list' : 'Show the vendor list'}
-          title={vendorsOpen ? 'Hide vendors' : 'Show vendors'}
-          onClick={toggleVendors}
-        >
-          {vendorsOpen ? '«' : '»'}
-        </button>
-      </div>
-      {vendorsOpen && (
-        <>
-          {vendors === null && !error && <p className="card-empty">Loading…</p>}
-          {vendors?.length === 0 && <p className="card-empty">No vendors yet. Upload a contract in the chat.</p>}
-          <ul>
-            {vendors?.map((vendor) => (
-              <li key={vendor.id}>
-                <button
-                  type="button"
-                  className={vendor.id === selectedId ? 'lib-vendor lib-vendor-active' : 'lib-vendor'}
-                  aria-current={vendor.id === selectedId ? 'true' : undefined}
-                  onClick={() => setSelectedId(vendor.id)}
-                >
-                  <span>{vendor.name}</span>
-                  <span className="card-meta">{vendor.contract_count}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </nav>
+      <nav className="lib-vendors" aria-label="Vendors">
+        <div className="lib-vendors-head">
+          {vendorsOpen && <p className="card-section">Vendors</p>}
+          <button
+            type="button"
+            className="lib-vendors-toggle"
+            aria-expanded={vendorsOpen}
+            aria-label={vendorsOpen ? 'Hide the vendor list' : 'Show the vendor list'}
+            title={vendorsOpen ? 'Hide vendors' : 'Show vendors'}
+            onClick={toggleVendors}
+          >
+            {vendorsOpen ? '«' : '»'}
+          </button>
+        </div>
+        {vendorsOpen && (
+          <>
+            {vendors === null && !error && <p className="card-empty">Loading…</p>}
+            {vendors?.length === 0 && <p className="card-empty">No vendors yet. Upload a contract in the chat.</p>}
+            <ul>
+              {vendors?.map((vendor) => (
+                <li key={vendor.id}>
+                  <button
+                    type="button"
+                    className={vendor.id === selectedId ? 'lib-vendor lib-vendor-active' : 'lib-vendor'}
+                    aria-current={vendor.id === selectedId ? 'true' : undefined}
+                    onClick={() => setSelectedId(vendor.id)}
+                  >
+                    <span>{vendor.name}</span>
+                    <span className="card-meta">{vendor.contract_count}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </nav>
 
       <section className="lib-detail">
         {error && <p className="intake-error">⚠ {error}</p>}
@@ -378,6 +404,7 @@ export default function Library({
                 library={library}
                 status={status}
                 vendors={vendors ?? []}
+                target={jump}
                 onChanged={refresh}
                 onFixed={() => {
                   refresh()

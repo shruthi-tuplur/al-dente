@@ -3,6 +3,7 @@
 // about the MSA section), all checked in code. The attorney makes the call. Nonna never does.
 import { useEffect, useState } from 'react'
 import ClauseBlock from './ClauseBlock'
+import { SourceLink } from './LibraryLink'
 import { formatDate } from './format'
 import { fetchPrecedence, recordPrecedenceCall } from './nonnaApi'
 import type { Controls, PrecedenceReport, TermConflict, TermSide } from './nonnaApi'
@@ -29,7 +30,9 @@ function Side({ kind, side, wins }: { kind: 'MSA' | 'SOW'; side: TermSide; wins:
       </p>
       <p className="tc-side-value">{side.value}</p>
       <p className="tc-side-source">
-        {side.source.title}, {formatDate(side.source.effective_date)}
+        <SourceLink target={{ contractId: side.source.id, section: side.section_number, quote: null }}>
+          {side.source.title}, {formatDate(side.source.effective_date)}
+        </SourceLink>
         {side.amended_by ? ` · changed by ${side.amended_by.title}` : ''}
         {side.review_status === 'pending' ? ' · still waiting for review' : ''}
       </p>

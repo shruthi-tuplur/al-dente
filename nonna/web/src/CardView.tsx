@@ -15,6 +15,8 @@ import { HistoryTimeline } from './DecisionHistory'
 import { NotesCard } from './RelationshipNotes'
 import { PrecedenceList } from './TermControls'
 import TermLabel from './TermLabel'
+import { SourceLink } from './LibraryLink'
+import type { LibraryTarget } from './LibraryLink'
 import {
   CONTRACT_TYPE_LABELS,
   describeTerms,
@@ -98,6 +100,15 @@ function sourceLine(source: Source, clause: ClauseData): string {
   return `${type}${clause.section_number ? ` §${clause.section_number}` : ''} · ${formatDate(source.effective_date)}`
 }
 
+// Where a clause lives, for a link from chat to the Library
+function clauseTarget(source: Source, clause: ClauseData): LibraryTarget {
+  return { contractId: source.id, section: clause.section_number, quote: clause.full_text }
+}
+
+function contractTarget(id: number): LibraryTarget {
+  return { contractId: id, section: null, quote: null }
+}
+
 function clauseValue(clause: ClauseData): string {
   if (clause.presence === 'absent') return 'Not in this contract'
   if (clause.presence === 'incorporated_by_reference') return 'Follows the MSA'
@@ -118,7 +129,9 @@ function TermRows({ positions }: { positions: Position[] }) {
             </span>
             <span className="card-value">{clauseValue(p.clause)}</span>
           </div>
-          <span className="quote">{sourceLine(p.source, p.clause)}</span>
+          <span className="quote">
+            <SourceLink target={clauseTarget(p.source, p.clause)}>{sourceLine(p.source, p.clause)}</SourceLink>
+          </span>
         </li>
       ))}
     </ul>
@@ -131,7 +144,7 @@ function DocumentRow({ contract, nested }: { contract: ContractData; nested: boo
       <div className="card-row">
         <span>
           <span className="doc-type">{CONTRACT_TYPE_LABELS[contract.contract_type] ?? contract.contract_type}</span>
-          {contract.title}
+          <SourceLink target={contractTarget(contract.id)}>{contract.title}</SourceLink>
         </span>
         <span className="card-meta">{formatDate(contract.effective_date)}</span>
       </div>
@@ -208,7 +221,7 @@ function HistoryCard({ entries }: { entries: HistoryEntry[] }) {
             <span className="card-value">{clauseValue(entry.clause)}</span>
           </div>
           <span className="quote">
-            {sourceLine(entry.source, entry.clause)}
+            <SourceLink target={clauseTarget(entry.source, entry.clause)}>{sourceLine(entry.source, entry.clause)}</SourceLink>
             {entry.clause.review_status === 'pending' ? ' · waiting for review' : ''}
           </span>
           {entry.decisions
@@ -238,8 +251,10 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
           <li key={item.clause.id}>
             <div className="card-row">
               <span className="card-label">
-                {item.source.title}
-                {item.clause.section_number ? ` · §${item.clause.section_number}` : ''}
+                <SourceLink target={clauseTarget(item.source, item.clause)}>
+                  {item.source.title}
+                  {item.clause.section_number ? ` · §${item.clause.section_number}` : ''}
+                </SourceLink>
               </span>
               <span className={item.is_agreed ? 'badge badge-agreed' : 'badge'}>
                 {item.is_agreed ? 'Agreed' : item.clause.review_status === 'pending' ? 'Waiting for review' : item.clause.review_status}
@@ -278,8 +293,12 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
           <li key={item.section.id}>
             <div className="card-row">
               <span className="card-label">
-                {item.source.title}
-                {item.section.section_number ? ` · §${item.section.section_number}` : ''}
+                <SourceLink
+                  target={{ contractId: item.source.id, section: item.section.section_number, quote: item.section.full_text }}
+                >
+                  {item.source.title}
+                  {item.section.section_number ? ` · §${item.section.section_number}` : ''}
+                </SourceLink>
               </span>
               <span className="badge">As written</span>
             </div>
@@ -345,9 +364,11 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
                   <span className="card-value">{clauseValue(row.clause)}</span>
                 </div>
                 <span className="quote">
-                  {row.source.title}
-                  {row.clause.section_number ? ` · §${row.clause.section_number}` : ''} ·{' '}
-                  {formatDate(row.source.effective_date)}
+                  <SourceLink target={clauseTarget(row.source, row.clause)}>
+                    {row.source.title}
+                    {row.clause.section_number ? ` · §${row.clause.section_number}` : ''} ·{' '}
+                    {formatDate(row.source.effective_date)}
+                  </SourceLink>
                 </span>
               </li>
             ))}
@@ -464,8 +485,10 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
                     {row.days_until !== null && <span className="deadline-days"> · {daysLabel(row.days_until)}</span>}
                   </p>
                   <span className="quote">
+                  <SourceLink target={contractTarget(row.source.id)}>
                     {row.source.title} · {formatDate(row.source.effective_date)}
-                    {row.term_source.id !== row.source.id ? ` · term from ${row.term_source.title}` : ''}
+                  </SourceLink>
+                  {row.term_source.id!== row.source.id ? ` · term from ${row.term_source.title}` : ''}
                   </span>
                   <p className="deadline-summary">{row.summary}</p>
                   {showDownloads && canAddToCalendar(row) && (
@@ -538,7 +561,9 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
                 <span className="card-value">{clauseValue(item.clause)}</span>
               </div>
               <span className="quote">
+                <SourceLink target={clauseTarget(item.source, item.clause)}>
                 {item.source.title} · {sourceLine(item.source, item.clause)}
+              </SourceLink>
               </span>
               {item.playbook?.needs_sign_off && <PlaybookNote assessment={item.playbook} />}
               <ReviewControls

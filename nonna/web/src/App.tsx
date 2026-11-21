@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import CardView from './CardView'
+import ContractDrawer from './ContractDrawer'
 import ExplainSelection from './ExplainSelection'
 import IntakeCard from './IntakeCard'
 import Library from './Library'
+import { OpenInLibrary } from './LibraryLink'
+import type { LibraryTarget } from './LibraryLink'
 import Playbook from './Playbook'
 import Review from './Review'
 import RichText from './RichText'
@@ -16,6 +19,8 @@ export default function App() {
   const [view, setView] = useState<'chat' | 'library' | 'review' | 'playbook'>('chat')
   const [pendingCount, setPendingCount] = useState<number | null>(null)
   const [openDraft, setOpenDraft] = useState<Draft | null>(null) // a draft from chat, to open in the Library
+  const [jumpTo, setJumpTo] = useState<LibraryTarget | null>(null) // a contract to open in the Library
+  const [peek, setPeek] = useState<{ target: LibraryTarget; key: number } | null>(null) // a source tapped in chat
   const [draft, setDraft] = useState('')
   const [waiting, setWaiting] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
@@ -35,7 +40,21 @@ export default function App() {
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
   }, [draft])
 
-    // How many extracted terms are waiting for review, shown on the Review tab
+    // A source tapped in a chat card: slide the contract in from the right, chat stays put
+  function peekContract(target: LibraryTarget) {
+    setPeek((current) => ({ target, key: (current?.key ?? 0) + 1 }))
+  }
+
+  // From the drawer: open that contract in the Library, at that section
+  function openInLibrary(target: LibraryTarget) {
+    setPeek(null)
+    setJumpTo(target)
+    setView('library')
+  }
+
+  const closePeek = useCallback(() => setPeek(null), [])
+
+  // How many extracted terms are waiting for review, shown on the Review tab
     function refreshPendingCount() {
       fetchReviewQueue()
         .then((queue) => setPendingCount(queue.length))
@@ -118,7 +137,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={peek && view === 'chat' ? 'app has-drawer' : 'app'}>
       <header className="header">
         <h1 className="logo">nonna</h1>
         <nav className="views" aria-label="Views">
@@ -158,9 +177,17 @@ export default function App() {
         </nav>
       </header>
 
-      {view === 'library' && <Library openDraft={openDraft} onDraftOpened={() => setOpenDraft(null)} />}
+      {view === 'library' && (
+        <Library
+          openDraft={openDraft}
+          onDraftOpened={() => setOpenDraft(null)}
+          jumpTo={jumpTo}
+          onJumped={() => setJumpTo(null)}
+        />
+      )}
       {view === 'review' && <Review onDecided={refreshPendingCount} />}
       {view === 'playbook' && <Playbook />}
+      <OpenInLibrary.Provider value={peekContract}>
 
       <main className="chat" aria-live="polite" hidden={view !== 'chat'}>
         <div className="thread">
@@ -210,6 +237,10 @@ export default function App() {
           <div ref={endRef} />
         </div>
       </main>
+      </OpenInLibrary.Provider>
+      {peek && view === 'chat' && (
+        <ContractDrawer key={peek.key} target={peek.target} onClose={closePeek} onOpenInLibrary={openInLibrary} />
+      )}
 
       <div className="composer-wrap" hidden={view !== 'chat'}>
         <form className="composer" onSubmit={handleSubmit}>

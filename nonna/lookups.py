@@ -718,6 +718,7 @@ def get_contract_text(session: Session, contract_id: int) -> tuple[ContractText,
     return (
         ContractText(
             id=contract.id,
+            counterparty_id=contract.counterparty_id,
             title=contract.title,
             contract_type=contract.contract_type,
             effective_date=contract.effective_date,

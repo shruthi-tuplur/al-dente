@@ -3376,3 +3376,179 @@ button.attention-chip:hover {
     grid-template-columns: 1fr;
   }
 }
+
+
+
+
+/* Links from chat to the library: a source line you can tap */
+.source-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: #d9d1c6;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.source-link:hover {
+  color: var(--nonna-red);
+  text-decoration-color: currentColor;
+}
+
+.source-link:focus-visible {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+.source-link-arrow {
+  display: inline-block;
+  margin-left: 4px;
+  font-style: normal;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The part of a contract a chat link pointed to */
+.jump-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.jump-mark {
+  background: rgba(224, 176, 94, 0.32);
+  color: inherit;
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px rgba(224, 176, 94, 0.32);
+}
+
+
+
+/* A contract sliding in from the right over chat (tap a source in a chat card) */
+.app {
+  --drawer-width: min(620px, 46vw);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: var(--drawer-width);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-left: 1px solid #e6e0d8;
+  box-shadow: -12px 0 32px rgba(43, 29, 20, 0.1);
+  animation: drawer-in 220ms ease-out;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    animation: none;
+  }
+}
+
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 22px 24px 4px;
+}
+
+.drawer-title {
+  min-width: 0;
+}
+
+.drawer-title .card-title {
+  margin: 0;
+}
+
+.drawer-close {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--espresso);
+  cursor: pointer;
+}
+
+.drawer-close:hover {
+  color: var(--nonna-red);
+}
+
+.drawer-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 24px 0;
+  padding: 6px;
+  border-radius: 10px;
+  background: #faf8f5;
+}
+
+.drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 24px 28px;
+}
+
+.drawer .full-contract-text {
+  max-height: none;
+  margin-top: 0;
+}
+
+/* On wide screens the chat shifts left so the drawer doesn't cover it */
+@media (min-width: 1100px) {
+  .chat,
+  .composer-wrap {
+    transition: padding-right 220ms ease-out;
+  }
+
+  .has-drawer .chat,
+  .has-drawer .composer-wrap {
+    padding-right: calc(var(--drawer-width) + 40px);
+  }
+}
+
+@media (max-width: 760px) {
+  .app {
+    --drawer-width: 100vw;
+  }
+}

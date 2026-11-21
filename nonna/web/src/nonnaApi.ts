@@ -415,6 +415,7 @@ export async function fetchLibrary(counterpartyId: number): Promise<Counterparty
 
 export interface ContractText {
   id: number
+  counterparty_id: number
   title: string
   contract_type: ContractType
   effective_date: string

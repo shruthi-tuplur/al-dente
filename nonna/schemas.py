@@ -392,6 +392,7 @@ class ContractText(BaseModel):
     """The full text of one contract, for reading it in the library."""
 
     id: int
+    counterparty_id: int  # so a link from chat can open the right vendor in the library
     title: str
     contract_type: str
     effective_date: date
