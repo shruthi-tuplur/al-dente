@@ -303,7 +303,8 @@ function ConflictRow({ conflict, onChanged }: { conflict: TermConflict; onChange
           Which term controls <span className="lib-group-count">{report.conflicts.length}</span>
         </p>
         <p className="overview-hint">
-          Where an SOW says something different from the MSA. Nonna lines up the evidence, you make the call.
+          Where an SOW says something different from the MSA. Nonna lines up the evidence,{' '}
+        {CAN_EDIT ? 'you make the call.' : 'and an attorney makes the call.'}
         </p>
         <ul className="term-table">
           {report.conflicts.map((conflict) => (
