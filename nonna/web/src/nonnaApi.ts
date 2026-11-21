@@ -18,6 +18,7 @@ export type CardType =
   | 'draft'
   | 'precedence'
   | 'notes'
+  | 'decisions'
 
 export interface Card {
   type: CardType
@@ -524,6 +525,51 @@ export async function withdrawPlaybookException(exceptionId: number, note: strin
   if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't withdraw that exception."))
 }
 
+
+// ---------------------------------------------------------------------------
+// Decision history: everything anyone decided about a vendor, newest first
+// ---------------------------------------------------------------------------
+
+export type HistoryGroup = 'contracts' | 'reviews' | 'gc' | 'precedence' | 'notes'
+
+export interface HistoryEvent {
+  id: string
+  kind:
+    | 'uploaded'
+    | 'approved'
+    | 'approved_change'
+    | 'corrected'
+    | 'rejected'
+    | 'gc_exception'
+    | 'gc_exception_withdrawn'
+    | 'precedence_call'
+    | 'note_added'
+    | 'note_archived'
+  group: HistoryGroup
+  at: string
+  by: string
+  title: string
+  clause_type: string | null
+  value: string | null
+  detail: string | null
+  changes: { label: string; before: string; after: string }[]
+  note: string | null
+  source: ContractRef | null
+  section: string | null
+}
+
+export interface DecisionHistory {
+  counterparty_id: number
+  counterparty_name: string
+  events: HistoryEvent[] // newest first
+  counts: Partial<Record<HistoryGroup, number>>
+}
+
+export async function fetchDecisionHistory(counterpartyId: number): Promise<DecisionHistory> {
+  const response = await fetch(`/api/counterparties/${counterpartyId}/decisions`)
+  if (!response.ok) throw new Error(await errorDetail(response, "Nonna couldn't load the decision history."))
+  return (await response.json()) as DecisionHistory
+}
 
 // ---------------------------------------------------------------------------
 // Relationship notes: what the team knows that isn't in any contract

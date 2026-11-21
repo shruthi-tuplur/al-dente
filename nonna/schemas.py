@@ -316,7 +316,7 @@ class ChatRequest(BaseModel):
 
 CardType = LiteralCardType = Literal[
     "profile", "clause", "section", "positions", "history", "contracts", "review_queue", "vendors",
-        "deadlines", "amended", "playbook", "draft", "precedence", "notes",
+        "deadlines", "amended", "playbook", "draft", "precedence", "notes", "decisions",
 ]
 
 

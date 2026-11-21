@@ -11,6 +11,7 @@ import { DraftSummaryCard } from './Draft'
 import GoogleCalendarBar from './GoogleCalendar'
 import { PlaybookMatrix, PlaybookNote } from './Playbook'
 import ReviewControls, { ApproveAllBar } from './ReviewControls'
+import { HistoryTimeline } from './DecisionHistory'
 import { NotesCard } from './RelationshipNotes'
 import { PrecedenceList } from './TermControls'
 import TermLabel from './TermLabel'
@@ -575,6 +576,9 @@ export default function CardView({ card, onOpenDraft }: { card: Card; onOpenDraf
       break
     case 'playbook':
       body = <PlaybookMatrix data={card.data as PlaybookCheck} />
+      break
+    case 'decisions':
+      body = <HistoryTimeline data={card.data as DecisionHistory} />
       break
     case 'notes':
       body = <NotesCard data={card.data as RelationshipNotes} />

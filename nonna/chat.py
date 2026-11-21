@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from nonna import amendments, deadlines, drafting, lookups, notes, playbook, precedence
+from nonna import history as decision_history
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
 
@@ -64,6 +65,11 @@ get_section_text to pull the wording. These are not reviewed and have no agreed 
 say "here's what the contract says", never "this is what was agreed". If several contracts \
 have the clause, mention which ones and their dates, and don't decide which one controls.
 - If a topic isn't on file, say Nonna has no record of it in that counterparty's contracts.
+- For "who decided what" about a vendor (who approved the cap, why something was changed, \
+what the GC signed off on, what happened recently), use get_decision_history. It's the \
+permanent record: uploads, approvals, corrections, rejections, GC exceptions, which-term-controls \
+calls, and notes. Quote who, when, and their reason exactly as recorded. Never add a reason \
+nobody wrote. If the reason is blank, say no note was left.
 - Relationship notes are what the team knows about a vendor that isn't in any contract ("they \
 always fight us on IP", "business owner is in CMC", "renegotiating in Q2"). Use \
 get_relationship_notes when someone asks what to know before talking to a vendor, how a vendor \
@@ -383,6 +389,28 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "get_decision_history",
+        "description": (
+            "Everything anyone decided about one vendor, newest first: uploads, approvals, "
+            "intentional changes, corrections (before and after), rejections, GC exceptions, "
+            "which-term-controls calls, and notes, each with who, when, and their reason. "
+            "Optionally only one kind."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "counterparty_id": {"type": "integer"},
+                "group": {
+                    "type": "string",
+                    "enum": ["contracts", "reviews", "gc", "precedence", "notes"],
+                    "description": "Only this kind of decision. Leave out for everything.",
+                },
+                "limit": {"type": "integer", "description": "Newest N events. Default 25."},
+            },
+            "required": ["counterparty_id"],
+        },
+    },
+    {
         "name": "get_relationship_notes",
         "description": (
             "The team's relationship notes about one vendor: how they negotiate, the people "
@@ -438,6 +466,7 @@ STATUS_FOR_TOOL = {
     "check_playbook": "Checked against our playbook",
     "check_precedence": "Lined up the SOW and the MSA",
     "get_relationship_notes": "Read the team's notes",
+    "get_decision_history": "Read the decision history",
     "draft_sow": "Drafted from what you've agreed",
 }
 
@@ -607,6 +636,16 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
         names = [r["counterparty_name"] for r in data["rows"]]
         title = f"{names[0]} vs our playbook" if tool_input.get("counterparty_id") and names else "Vendors vs our playbook"
         _add_card(cards, Card(type="playbook", title=title, data=data))
+        return data
+
+    if name == "get_decision_history":
+        result = decision_history.get_history(session, tool_input["counterparty_id"])
+        group = tool_input.get("group")
+        events = [e for e in result.events if not group or e.group == group]
+        limit = max(1, min(int(tool_input.get("limit") or 25), 100))
+        result = result.model_copy(update={"events": events[:limit]})
+        data = result.model_dump(mode="json")
+        _add_card(cards, Card(type="decisions", title=f"Decision history: {result.counterparty_name}", data=data))
         return data
 
     if name == "get_relationship_notes":

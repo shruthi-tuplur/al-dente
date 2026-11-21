@@ -2698,3 +2698,160 @@
 .note-archive .note-list {
   margin-top: 10px;
 }
+
+
+/* Decision history: everything anyone decided about a vendor, newest first */
+.history-tab {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.history-tab .playbook-intro {
+  margin: 0;
+}
+
+.history {
+  display: grid;
+  gap: 22px;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.history-count {
+  margin-left: 7px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.history-day {
+  display: grid;
+  gap: 10px;
+}
+
+.history-date {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--espresso-muted);
+}
+
+.history-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 14px;
+  padding-bottom: 16px;
+}
+
+/* The line that joins one event to the next */
+.history-event:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 30px;
+  bottom: 0;
+  left: 14px;
+  width: 2px;
+  background: #efeae3;
+}
+
+.history-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  background: #f1ece5;
+  color: var(--espresso-muted);
+}
+
+.history-reviews .history-icon {
+  background: rgba(82, 94, 53, 0.12);
+  color: var(--basil);
+}
+
+.history-icon-rejected,
+.history-icon-gc_exception_withdrawn {
+  background: rgba(139, 28, 22, 0.08) !important;
+  color: var(--nonna-red) !important;
+}
+
+.history-icon-corrected {
+  background: rgba(224, 176, 94, 0.22) !important;
+  color: #7a5717 !important;
+}
+
+.history-gc .history-icon,
+.history-precedence .history-icon {
+  background: rgba(139, 28, 22, 0.08);
+  color: var(--nonna-red);
+}
+
+.history-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.history-body p {
+  margin: 0;
+}
+
+.history-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--espresso);
+}
+
+.history-value {
+  font-weight: 400;
+}
+
+.history-detail {
+  font-size: 14px;
+  color: var(--espresso-muted);
+}
+
+.history-changes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--espresso);
+}
+
+.history-changes s {
+  color: var(--espresso-muted);
+}
+
+.history-note {
+  padding: 6px 12px;
+  border-left: 2px solid #e4dccf;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--espresso);
+}
+
+.history-meta {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--espresso-muted);
+}

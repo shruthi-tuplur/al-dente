@@ -10,6 +10,7 @@ import { PlaybookNote } from './Playbook'
 import TermLabel from './TermLabel'
 import WhichTermControls from './TermControls'
 import { NotesStrip, NotesTab } from './RelationshipNotes'
+import DecisionHistoryTab from './DecisionHistory'
 import AsAmended from './AsAmended'
 import DraftTab from './Draft'
 import { fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
@@ -350,7 +351,7 @@ export default function Library({
   const [vendors, setVendors] = useState<CounterpartySummary[] | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(openDraft?.counterparty_id ?? null)
   const [library, setLibrary] = useState<CounterpartyLibrary | null>(null)
-  const [tab, setTab] = useState<'contracts' | 'clauses' | 'notes' | 'draft'>(openDraft ? 'draft' : 'contracts')
+  const [tab, setTab] = useState<'contracts' | 'clauses' | 'notes' | 'history' | 'draft'>(openDraft ? 'draft' : 'contracts')
   const [notesData, setNotesData] = useState<RelationshipNotes | null>(null)
   const [notesVersion, setNotesVersion] = useState(0)
   const [error, setError] = useState('')
@@ -487,6 +488,15 @@ export default function Library({
               >
                 Notes{notes && notes.notes.length > 0 ? ` (${notes.notes.length})` : ''}
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={shownTab === 'history'}
+                className={shownTab === 'history' ? 'lib-tab lib-tab-active' : 'lib-tab'}
+                onClick={() => setTab('history')}
+              >
+                History
+              </button>
               {canDraft && (
                 <button
                   type="button"
@@ -503,6 +513,7 @@ export default function Library({
             {shownTab === 'contracts' && <ContractsTab library={library} agreed={agreed} onChanged={refresh} />}
             {shownTab === 'clauses' && <ClausesTab library={library} agreed={agreed} onChanged={refresh} />}
             {shownTab === 'notes' && notes && <NotesTab data={notes} onChanged={() => setNotesVersion((n) => n + 1)} />}
+            {shownTab === 'history' && <DecisionHistoryTab counterpartyId={library.counterparty.id} reloadKey={library} />}
             {/* Kept mounted so a draft isn't lost when switching tabs */}
             {canDraft && (
               <div hidden={shownTab !== 'draft'}>

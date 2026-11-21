@@ -16,8 +16,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
 from nonna import (
-    amendments, chat, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar, intake, lookups,
-    notes, playbook, precedence, reviews, sections,
+    amendments, chat, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar, history, intake,
+    lookups, notes, playbook, precedence, reviews, sections,
 )
 from nonna.database import get_session
 from nonna.models import Clause, Contract
@@ -419,6 +419,14 @@ def get_contract_as_amended(contract_id: int, session: SessionDep) -> amendments
 def get_playbook(session: SessionDep, counterparty_id: int | None = None) -> playbook.PlaybookCheck:
     """Aurelia's playbook, and how every vendor's agreed terms measure up against it."""
     return playbook.check_vendors(session, counterparty_id)
+
+@app.get("/counterparties/{counterparty_id}/decisions", response_model=history.DecisionHistory)
+def get_decision_history(counterparty_id: int, session: SessionDep) -> history.DecisionHistory:
+    """Everything anyone decided about a vendor, newest first. Read-only."""
+    try:
+        return history.get_history(session, counterparty_id)
+    except history.NotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
 
 @app.get("/counterparties/{counterparty_id}/notes", response_model=notes.NotesOut)
 def get_relationship_notes(counterparty_id: int, session: SessionDep) -> notes.NotesOut:
