@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatDate, tidyClauseText } from './format'
 import { fetchAsAmended } from './nonnaApi'
 import type { AmendedContract, AmendedSection } from './nonnaApi'
@@ -56,51 +56,39 @@ export function Unresolved({ items }: { items: AmendedContract['unresolved'] }) 
   )
 }
 
-// The whole contract as it reads today, for the library
-export default function AsAmended({ contractId, amendmentCount }: { contractId: number; amendmentCount: number }) {
-  const [open, setOpen] = useState(false)
-  const [data, setData] = useState<AmendedContract | null>(null)
-  const [error, setError] = useState('')
-
-  async function toggle() {
-    const next = !open
-    setOpen(next)
-    if (next && data === null) {
-      try {
-        setData(await fetchAsAmended(contractId))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Nonna couldn't apply the amendments.")
+// The whole contract as it reads today, for the library. Loads when it opens.
+// (The button that opens it lives in the contract's toolbar in the Library.)
+export default function AsAmended({ contractId }: { contractId: number }) {
+    const [data, setData] = useState<AmendedContract | null>(null)
+    const [error, setError] = useState('')
+  
+    useEffect(() => {
+      let current = true
+      setData(null)
+      setError('')
+      fetchAsAmended(contractId)
+        .then((result) => current && setData(result))
+        .catch((err: unknown) => current && setError(err instanceof Error ? err.message : "Nonna couldn't apply the amendments."))
+      return () => {
+        current = false
       }
-    }
+    }, [contractId])
+  
+    if (error) return <p className="intake-error">⚠ {error}</p>
+    if (data === null) return <p className="thinking">Loading…</p>
+    return (
+      <div className="amended-view">
+        <p className="card-subtitle">
+          How this contract reads today, with {data.amendments.map((a) => a.title).join(', ')} applied.{' '}
+          {data.changed_count} {data.changed_count === 1 ? 'section changed' : 'sections changed'}. Built by Nonna from
+          the signed documents, so confirm against them before relying on it.
+        </p>
+        <Unresolved items={data.unresolved} />
+        <div className="full-contract-text amended-doc" tabIndex={0} aria-label="Contract as amended">
+          {data.sections.map((section) => (
+            <AmendedSectionView key={`${section.number}-${section.status}`} section={section} />
+          ))}
+        </div>
+      </div>
+    )
   }
-
-  return (
-    <div className="full-contract">
-      <button type="button" className="btn btn-sm btn-primary" aria-expanded={open} onClick={() => void toggle()}>
-        {open ? 'Hide as amended' : `Read as amended (${amendmentCount} ${amendmentCount === 1 ? 'amendment' : 'amendments'})`}
-      </button>
-
-      {open && (
-        <>
-          {error && <p className="intake-error">⚠ {error}</p>}
-          {!error && data === null && <p className="thinking">Loading…</p>}
-          {data && (
-            <div className="amended-view">
-              <p className="card-subtitle">
-                How this contract reads today, with {data.amendments.map((a) => a.title).join(', ')} applied.{' '}
-                {data.changed_count} {data.changed_count === 1 ? 'section changed' : 'sections changed'}. Built by
-                Nonna from the signed documents, so confirm against them before relying on it.
-              </p>
-              <Unresolved items={data.unresolved} />
-              <div className="full-contract-text amended-doc" tabIndex={0} aria-label="Contract as amended">
-                {data.sections.map((section) => (
-                  <AmendedSectionView key={`${section.number}-${section.status}`} section={section} />
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}

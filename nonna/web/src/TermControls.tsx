@@ -109,18 +109,28 @@ function CallForm({ conflict, onSaved, onCancel }: { conflict: TermConflict; onS
   )
 }
 
-function ConflictCard({ conflict, onChanged }: { conflict: TermConflict; onChanged?: () => void }) {
+function ConflictCard({
+  conflict,
+  onChanged,
+  hideHead = false,
+}: {
+  conflict: TermConflict
+  onChanged?: () => void
+  hideHead?: boolean // the Library's compact row already shows the term and the badge
+}) {
   const [changing, setChanging] = useState(false)
   const { msa, sow, rule, check, call } = conflict
   const msaName = check.msa_section ? `MSA §${check.msa_section}` : 'the MSA section'
 
   return (
     <li className="tc-card">
+    {!hideHead && (
       <div className="tc-head">
         <span className={call ? 'badge tc-badge-done' : 'badge badge-tier-outside'}>{call ? 'Call made' : 'Needs a call'}</span>
         <span className="tc-term">{conflict.label}</span>
         <span className="tc-where">· {sow.source.title}</span>
       </div>
+    )}
 
       <div className="tc-sides">
         <Side kind="MSA" side={msa} wins={call?.controls === 'msa'} />
@@ -208,42 +218,93 @@ export function PrecedenceList({ report, onChanged }: { report: PrecedenceReport
   )
 }
 
-// The panel at the top of a vendor's Library page. Hidden when nothing conflicts.
-export default function WhichTermControls({ counterpartyId, reloadKey }: { counterpartyId: number; reloadKey?: unknown }) {
-  const [report, setReport] = useState<PrecedenceReport | null>(null)
-  const [error, setError] = useState('')
-  const [loadCount, setLoadCount] = useState(0)
-
-  useEffect(() => {
-    let current = true
-    setError('')
-    fetchPrecedence(counterpartyId)
-      .then((data) => current && setReport(data))
-      .catch((err: unknown) => current && setError(err instanceof Error ? err.message : "Couldn't check the SOWs."))
-    return () => {
-      current = false
-    }
-  }, [counterpartyId, reloadKey, loadCount])
-
-  if (error) return <p className="intake-error">⚠ {error}</p>
-  if (!report || report.counterparty_id !== counterpartyId || report.conflicts.length === 0) return null
-
-  return (
-    <details className="tc-panel" open={report.open_count > 0}>
-      <summary className="tc-panel-summary">
-        <span className="tc-panel-title">⚖ Which term controls</span>
-        <span className="lib-group-count">{report.conflicts.length}</span>
-        <span className="tc-panel-status">
-          {report.open_count > 0
-            ? `${report.open_count} ${report.open_count === 1 ? 'needs' : 'need'} your call`
-            : 'All decided'}
-        </span>
-      </summary>
-      <p className="tc-intro">
-        These SOW terms say something different from the MSA. Nonna lines up both terms, the MSA's order of
-        precedence, and what the SOW says about the MSA section. Which one controls is your call.
-      </p>
-      <PrecedenceList report={report} onChanged={() => setLoadCount((n) => n + 1)} />
-    </details>
-  )
-}
+// One conflict as a single line: term, the two values, and the call. Click for the full card.
+function ConflictRow({ conflict, onChanged }: { conflict: TermConflict; onChanged: () => void }) {
+    const { msa, sow, call } = conflict
+    const [open, setOpen] = useState(!call) // open ones start open, so the call is right there
+    const outcome = call
+      ? `${call.controls === 'msa' ? 'MSA' : shortName(sow.source.title, sow.source.contract_type)} controls`
+      : 'Needs your call'
+  
+    return (
+      <li className={open ? 'term-line term-line-open' : 'term-line'}>
+        <button type="button" className="term-line-row tc-row" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span className="term-line-value">
+            <span className="term-line-name">{conflict.label}</span>
+            <span className="term-line-source">{sideLabel('SOW', sow)}</span>
+          </span>
+          <span className="tc-row-values">
+            <span className={call?.controls === 'msa' ? 'tc-row-win' : ''}>MSA: {msa.value}</span>
+            <span className="tc-row-vs">vs</span>
+            <span className={call?.controls === 'sow' ? 'tc-row-win' : ''}>SOW: {sow.value}</span>
+          </span>
+          <span className="term-line-badge">
+            <span className={call ? 'badge tc-badge-done' : 'badge badge-tier-outside'}>{outcome}</span>
+          </span>
+          <span className="term-line-count">
+            {call ? formatDate(call.decided_at.slice(0, 10)) : ''}
+            <span className="term-line-chevron" aria-hidden="true">
+              {open ? '▾' : '▸'}
+            </span>
+          </span>
+        </button>
+        {open && (
+          <ul className="tc-list tc-row-detail">
+            <ConflictCard conflict={conflict} onChanged={onChanged} hideHead />
+          </ul>
+        )}
+      </li>
+    )
+  }
+  
+  // The section on a vendor's Overview: one line per SOW term that disagrees with the MSA.
+  // Hidden when nothing conflicts. onReport lets the page show the open count elsewhere.
+  export default function WhichTermControls({
+    counterpartyId,
+    reloadKey,
+    onReport,
+  }: {
+    counterpartyId: number
+    reloadKey?: unknown
+    onReport?: (report: PrecedenceReport) => void
+  }) {
+    const [report, setReport] = useState<PrecedenceReport | null>(null)
+    const [error, setError] = useState('')
+    const [loadCount, setLoadCount] = useState(0)
+  
+    useEffect(() => {
+      let current = true
+      setError('')
+      fetchPrecedence(counterpartyId)
+        .then((data) => {
+          if (!current) return
+          setReport(data)
+          onReport?.(data)
+        })
+        .catch((err: unknown) => current && setError(err instanceof Error ? err.message : "Couldn't check the SOWs."))
+      return () => {
+        current = false
+      }
+      // onReport is left out on purpose: a new function each render would reload forever
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [counterpartyId, reloadKey, loadCount])
+  
+    if (error) return <p className="intake-error">⚠ {error}</p>
+    if (!report || report.counterparty_id !== counterpartyId || report.conflicts.length === 0) return null
+  
+    return (
+      <section className="overview-section">
+        <p className="overview-label">
+          Which term controls <span className="lib-group-count">{report.conflicts.length}</span>
+        </p>
+        <p className="overview-hint">
+          Where an SOW says something different from the MSA. Nonna lines up the evidence, you make the call.
+        </p>
+        <ul className="term-table">
+          {report.conflicts.map((conflict) => (
+            <ConflictRow key={conflict.sow.clause_id} conflict={conflict} onChanged={() => setLoadCount((n) => n + 1)} />
+          ))}
+        </ul>
+      </section>
+    )
+  }
