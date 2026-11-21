@@ -5,6 +5,7 @@ import type { FormEvent } from 'react'
 import { formatDate } from './format'
 import GcSignOffForm from './GcSignOffForm'
 import {
+  CAN_EDIT,
   CURRENT_USER,
   fetchPlaybook,
   recordPlaybookException,
@@ -453,7 +454,7 @@ function RuleCard({ rule, onSaved }: { rule: PlaybookRule; onSaved: () => void }
         {rule.note ? ` · ${rule.note}` : ''}
       </p>
 
-      {!editing ? (
+      {!CAN_EDIT ? null : !editing ? (
         <button type="button" className="lib-fix" onClick={startEditing}>
           Edit rule
         </button>
@@ -536,7 +537,7 @@ export default function Playbook() {
               is fine with it. New terms that are off playbook need GC sign-off in Review before anyone
               approves them.
             </p>
-            <PlaybookMatrix data={data} onChanged={() => setLoadCount((n) => n + 1)} />
+                        <PlaybookMatrix data={data} onChanged={CAN_EDIT ? () => setLoadCount((n) => n + 1) : undefined} />
           </section>
 
           <section className="lib-group">

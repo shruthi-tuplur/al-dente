@@ -12,7 +12,7 @@ import type { LibraryTarget } from './LibraryLink'
 import LibraryOverview from './LibraryOverview'
 import { ClauseRow } from './LibraryRows'
 import type { Status } from './LibraryRows'
-import { fetchContractText, fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
+import { CAN_EDIT, fetchContractText, fetchCounterparties, fetchLibrary, fetchNotes } from './nonnaApi'
 import type {
   ContractType,
   CounterpartyLibrary,
@@ -91,9 +91,11 @@ function ContractCard({
         <a className="lib-tool" href={`/api/contracts/${contract.id}/file`} target="_blank" rel="noreferrer">
           Original file ↗
         </a>
-        <button type="button" className="lib-tool lib-tool-end" aria-pressed={panel === 'fix'} onClick={() => toggle('fix')}>
-          Fix upload details
-        </button>
+        {CAN_EDIT && (
+          <button type="button" className="lib-tool lib-tool-end" aria-pressed={panel === 'fix'} onClick={() => toggle('fix')}>
+            Fix upload details
+          </button>
+        )}
       </div>
 
       {panel !== null && (
@@ -304,8 +306,8 @@ export default function Library({
     playbook: library?.playbook ?? {},
   }
 
-  // Only vendors with an SOW on file can have a new one drafted
-  const canDraft = library?.contracts.some(({ contract }) => contract.contract_type === 'SOW') ?? false
+  // Only attorneys draft, and only for vendors with an SOW on file to start from
+  const canDraft = CAN_EDIT && (library?.contracts.some(({ contract }) => contract.contract_type === 'SOW') ?? false)
   const shownTab: Tab = tab === 'draft' && !canDraft ? 'overview' : tab
   // Only show notes that belong to the vendor on screen (not the last one, mid-switch)
   const notes = notesData && library && notesData.counterparty_id === library.counterparty.id ? notesData : null

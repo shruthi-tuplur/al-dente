@@ -1,6 +1,50 @@
 // Talking to Nonna's backend. The Vite proxy sends /api/... to FastAPI on port 8000.
 import type { ClauseType } from './format'
 
+// ---------------------------------------------------------------------------
+// Who's using the app
+// ---------------------------------------------------------------------------
+
+// No login yet: pick a demo user in the header (remembered in this browser).
+// The server decides what each user can do and checks it on every change.
+// This list only fills the switcher and hides buttons a read-only user can't use.
+export const DEMO_USERS = [
+  { name: 'demo.attorney', label: 'Attorney', role: 'attorney' },
+  { name: 'demo.business', label: 'Business (read-only)', role: 'business' },
+] as const
+
+function storedUser(): string {
+  try {
+    const name = localStorage.getItem('nonna.user')
+    if (DEMO_USERS.some((u) => u.name === name)) return name as string
+  } catch {
+    // Storage blocked: fall back to the default
+  }
+  return 'demo.attorney'
+}
+
+// Every action is recorded under this name
+export const CURRENT_USER = storedUser()
+// Attorneys can change things. Business users are read-only.
+export const CAN_EDIT = DEMO_USERS.find((u) => u.name === CURRENT_USER)?.role === 'attorney'
+
+// Switch demo user. The page reloads so nothing from the last user is left on screen.
+export function switchUser(name: string) {
+  try {
+    localStorage.setItem('nonna.user', name)
+  } catch {
+    return // can't remember the choice, so don't pretend it changed
+  }
+  window.location.reload()
+}
+
+// Every request says who's asking, so the server can check what they're allowed to do
+function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  headers.set('X-Nonna-User', CURRENT_USER)
+  return fetch(input, { ...init, headers })
+}
+
 export type Role = 'user' | 'nonna'
 
 export type CardType =
@@ -145,8 +189,6 @@ export async function uploadContract(file: File): Promise<IntakeProposal> {
 }
 
 
-// No login yet, so every action is recorded under this name
-export const CURRENT_USER = 'demo.attorney'
 
 export interface SaveContractRequest {
   file_hash: string

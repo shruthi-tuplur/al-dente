@@ -3,7 +3,7 @@
 // Notes are never edited or deleted. Archive one when it's out of date, then add a new one.
 import { useState } from 'react'
 import { formatDate } from './format'
-import { addNote, archiveNote } from './nonnaApi'
+import { CAN_EDIT, addNote, archiveNote } from './nonnaApi'
 import type { NoteTopic, RelationshipNote, RelationshipNotes } from './nonnaApi'
 
 const TOPICS: { value: NoteTopic; label: string; placeholder: string }[] = [
@@ -143,14 +143,14 @@ export function NotesTab({ data, onChanged }: { data: RelationshipNotes; onChang
         What the team knows about {data.counterparty_name} that isn't in any contract. Notes can't be edited:
         archive one when it's out of date and add a new one, so the history stays.
       </p>
-      <AddNote counterpartyId={data.counterparty_id} onAdded={onChanged} />
+           {CAN_EDIT && <AddNote counterpartyId={data.counterparty_id} onAdded={onChanged} />}
 
       {data.notes.length === 0 ? (
         <p className="card-empty">No notes yet.</p>
       ) : (
         <ul className="note-list">
           {data.notes.map((note) => (
-            <NoteItem key={note.id} note={note} onArchived={onChanged} />
+                       <NoteItem key={note.id} note={note} onArchived={CAN_EDIT ? onChanged : undefined} />
           ))}
         </ul>
       )}

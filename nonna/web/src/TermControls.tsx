@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import ClauseBlock from './ClauseBlock'
 import { SourceLink } from './LibraryLink'
 import { formatDate } from './format'
-import { fetchPrecedence, recordPrecedenceCall } from './nonnaApi'
+import { CAN_EDIT, fetchPrecedence, recordPrecedenceCall } from './nonnaApi'
 import type { Controls, PrecedenceReport, TermConflict, TermSide } from './nonnaApi'
 
 function sideLabel(kind: 'MSA' | 'SOW', side: TermSide): string {
@@ -201,7 +201,9 @@ function ConflictCard({
           onCancel={changing ? () => setChanging(false) : undefined}
         />
       ) : (
-        <p className="tc-note">Waiting for an attorney's call. Make it in the Library.</p>
+                <p className="tc-note">
+          Waiting for an attorney's call.{CAN_EDIT ? ' Make it in the Library.' : ''}
+        </p>
       )}
     </li>
   )
@@ -253,7 +255,7 @@ function ConflictRow({ conflict, onChanged }: { conflict: TermConflict; onChange
         </button>
         {open && (
           <ul className="tc-list tc-row-detail">
-            <ConflictCard conflict={conflict} onChanged={onChanged} hideHead />
+                      <ConflictCard conflict={conflict} onChanged={CAN_EDIT ? onChanged : undefined} hideHead />
           </ul>
         )}
       </li>

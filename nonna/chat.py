@@ -14,7 +14,7 @@ import anthropic
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from nonna import amendments, deadlines, drafting, lookups, notes, playbook, precedence
+from nonna import access, amendments, deadlines, drafting, lookups, notes, playbook, precedence
 from nonna import history as decision_history
 from nonna.sections import CATEGORY_ORDER
 from nonna.schemas import BASELINE_TYPES, Card, ChatMessage, ChatResponse, ClauseType, VendorFilter
@@ -486,6 +486,25 @@ CLAUSE_LABELS = {
 }
 
 
+# Tools that make something new. Read-only (business) users don't get them at all.
+ATTORNEY_TOOLS = {"draft_sow"}
+
+READ_ONLY_PROMPT = """
+
+This user has read-only access (someone on the business side, not the legal team). \
+They can look anything up, but they can't draft, review, approve, correct, or change anything, \
+and you don't have the drafting tool in this conversation. If they ask for any of those, say \
+it's something the legal team does and suggest they ask an attorney. Keep answers plain: \
+they may not know contract terms of art, so explain any you use in a few words."""
+
+
+def tools_for(role: access.Role) -> list[dict[str, Any]]:
+    """The tools this user's chat can use. Read-only users get the lookup tools only."""
+    if role == "attorney":
+        return TOOLS
+    return [tool for tool in TOOLS if tool["name"] not in ATTORNEY_TOOLS]
+
+
 class ChatUnavailable(Exception):
     """Nonna can't reach Claude (missing key, network problem, or API error)."""
 
@@ -679,9 +698,16 @@ def run_tool(session: Session, name: str, tool_input: dict[str, Any], cards: lis
     raise ValueError(f"Unknown tool: {name}")
 
 
-def run_chat(session: Session, history: list[ChatMessage]) -> ChatResponse:
-    """Send the conversation to Claude, run any tools it asks for, and return the reply."""
+def run_chat(session: Session, history: list[ChatMessage], role: access.Role = "attorney") -> ChatResponse:
+    """Send the conversation to Claude, run any tools it asks for, and return the reply.
+
+    Read-only users get fewer tools and a note in the prompt. The tool check below backs that up
+    in code, so even a confused model can't draft for them.
+    """
     client = _client()
+    tools = tools_for(role)
+    allowed = {tool["name"] for tool in tools}
+    system = SYSTEM_PROMPT if role == "attorney" else SYSTEM_PROMPT + READ_ONLY_PROMPT
     messages: list[dict[str, Any]] = [{"role": m.role, "content": m.content} for m in history]
     cards: list[Card] = []
     status: str | None = None
@@ -691,8 +717,8 @@ def run_chat(session: Session, history: list[ChatMessage]) -> ChatResponse:
             response = client.messages.create(
                 model=MODEL,
                 max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                tools=TOOLS,
+                system=system,
+                tools=tools,
                 messages=messages,
             )
         except anthropic.APIError as error:
@@ -704,6 +730,11 @@ def run_chat(session: Session, history: list[ChatMessage]) -> ChatResponse:
         results = []
         for block in response.content:
             if block.type != "tool_use":
+                continue
+            if block.name not in allowed:
+                results.append(
+                    {"type": "tool_result", "tool_use_id": block.id, "content": access.READ_ONLY, "is_error": True}
+                )
                 continue
             status = STATUS_FOR_TOOL.get(block.name, status)
             try:

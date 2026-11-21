@@ -23,6 +23,7 @@ import {
   formatDate,
 } from './format'
 import type { Term } from './format'
+import { CAN_EDIT } from './nonnaApi'
 import type { AmendedContract, Card, Draft, PlaybookCheck, PrecedenceReport, RelationshipNotes } from './nonnaApi'
 
 interface Source {
@@ -449,7 +450,7 @@ function ClauseCard({ items }: { items: ClauseTextData[] }) {
           As of {formatDate(data.as_of)} · Estimated from each contract's reviewed term, so confirm against the
           contract before acting
         </p>
-        {upcoming.length > 0 && <GoogleCalendarBar onConnectedChange={setGoogleConnected} />}
+                {upcoming.length > 0 && CAN_EDIT && <GoogleCalendarBar onConnectedChange={setGoogleConnected} />}
         {showDownloads && (
           <div className="deadline-download">
             <button
@@ -550,7 +551,7 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
     if (items.length === 0) return <p className="card-empty">Nothing is waiting for review.</p>
     return (
       <>
-        <ApproveAllBar bulk={bulk} />
+        {CAN_EDIT && <ApproveAllBar bulk={bulk} />}
         <ul className="card-rows">
           {items.map((item) => (
             <li key={item.clause.id}>
@@ -566,17 +567,19 @@ function ReviewQueueCard({ items }: { items: QueueItem[] }) {
               </SourceLink>
               </span>
               {item.playbook?.needs_sign_off && <PlaybookNote assessment={item.playbook} />}
-              <ReviewControls
-                clauseId={item.clause.id}
-                external={bulk.results[item.clause.id]}
-                onResolved={() => bulk.markResolved(item.clause.id)}
-                needsSignOff={item.playbook?.needs_sign_off}
-                correct={
-                  canCorrect(item.clause.clause_type, item.clause.presence)
-                    ? { clauseType: item.clause.clause_type, terms: item.clause.terms }
-                    : undefined
-                }
-              />
+              {CAN_EDIT && (
+                <ReviewControls
+                  clauseId={item.clause.id}
+                  external={bulk.results[item.clause.id]}
+                  onResolved={() => bulk.markResolved(item.clause.id)}
+                  correct={
+                    canCorrect(item.clause.clause_type, item.clause.presence)
+                      ? { clauseType: item.clause.clause_type, terms: item.clause.terms }
+                      : undefined
+                  }
+                  needsSignOff={item.playbook?.needs_sign_off}
+                />
+              )}
             </li>
           ))}
         </ul>

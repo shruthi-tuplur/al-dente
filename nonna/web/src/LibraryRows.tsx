@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import ClauseBlock from './ClauseBlock'
 import CorrectionForm, { canCorrect } from './CorrectionForm'
 import { describeTerms } from './format'
+import { CAN_EDIT } from './nonnaApi'
 import type { LibraryClause, PlaybookAssessment } from './nonnaApi'
 import { ExceptionLine, PlaybookBadge } from './Playbook'
 
@@ -46,7 +47,7 @@ export function ClauseRow({
   const [open, setOpen] = useState<'wording' | 'fix' | null>(null)
   const [saved, setSaved] = useState('')
   const reviewed = clause.review_status === 'approved' || clause.review_status === 'corrected'
-  const fixable = reviewed && canCorrect(clause.clause_type, clause.presence)
+    const fixable = CAN_EDIT && reviewed && canCorrect(clause.clause_type, clause.presence)
   const assessment = status.playbook[clause.id]
   // Only spell out the playbook when it matters: off playbook, or the GC signed off
   const playbookLine = assessment && (assessment.exception || assessment.tier === 'outside')

@@ -10,7 +10,8 @@ import type { LibraryTarget } from './LibraryLink'
 import Playbook from './Playbook'
 import Review from './Review'
 import RichText from './RichText'
-import { askNonna, fetchReviewQueue, uploadContract } from './nonnaApi'
+import { CAN_EDIT, askNonna, fetchReviewQueue, uploadContract } from './nonnaApi'
+import UserSwitch, { ReadOnlyBanner } from './UserSwitch'
 import type { Draft, Message } from './nonnaApi'
 import './App.css'
 
@@ -140,6 +141,8 @@ export default function App() {
     <div className={peek && view === 'chat' ? 'app has-drawer' : 'app'}>
       <header className="header">
         <h1 className="logo">nonna</h1>
+        <div className="header-right">
+        <UserSwitch />
         <nav className="views" aria-label="Views">
           <button
             type="button"
@@ -157,15 +160,17 @@ export default function App() {
           >
             Library
           </button>
-          <button
-            type="button"
-            className={view === 'review' ? 'view-btn view-btn-active' : 'view-btn'}
-            aria-current={view === 'review' ? 'page' : undefined}
-            onClick={() => setView('review')}
-          >
-            Review
-            {pendingCount ? <span className="view-count">{pendingCount}</span> : null}
-          </button>
+          {CAN_EDIT && (
+            <button
+              type="button"
+              className={view === 'review' ? 'view-btn view-btn-active' : 'view-btn'}
+              aria-current={view === 'review' ? 'page' : undefined}
+              onClick={() => setView('review')}
+            >
+              Review
+              {pendingCount ? <span className="view-count">{pendingCount}</span> : null}
+            </button>
+          )}
           <button
             type="button"
             className={view === 'playbook' ? 'view-btn view-btn-active' : 'view-btn'}
@@ -175,7 +180,9 @@ export default function App() {
             Playbook
           </button>
         </nav>
+        </div>
       </header>
+      <ReadOnlyBanner />
 
       {view === 'library' && (
         <Library
@@ -185,7 +192,7 @@ export default function App() {
           onJumped={() => setJumpTo(null)}
         />
       )}
-      {view === 'review' && <Review onDecided={refreshPendingCount} />}
+      {view === 'review' && CAN_EDIT && <Review onDecided={refreshPendingCount} />}
       {view === 'playbook' && <Playbook />}
       <OpenInLibrary.Provider value={peekContract}>
 
@@ -244,22 +251,20 @@ export default function App() {
 
       <div className="composer-wrap" hidden={view !== 'chat'}>
         <form className="composer" onSubmit={handleSubmit}>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.docx"
-            onChange={handleFile}
-            hidden
-          />
-          <button
-            type="button"
-            className="attach"
-            aria-label="Upload a contract"
-            title="Upload a contract (PDF or Word)"
-            onClick={() => fileRef.current?.click()}
-          >
-            <PaperclipIcon />
-          </button>
+          {CAN_EDIT && (
+            <>
+              <input ref={fileRef} type="file" accept=".pdf,.docx" onChange={handleFile} hidden />
+              <button
+                type="button"
+                className="attach"
+                aria-label="Upload a contract"
+                title="Upload a contract (PDF or Word)"
+                onClick={() => fileRef.current?.click()}
+              >
+                <PaperclipIcon />
+              </button>
+            </>
+          )}
           <textarea
             ref={inputRef}
             className="composer-input"

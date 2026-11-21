@@ -7,7 +7,7 @@ import { CLAUSE_LABELS, formatDate, todayISO } from './format'
 import type { ClauseType } from './format'
 import { ClauseRow, clauseSummary } from './LibraryRows'
 import type { Status } from './LibraryRows'
-import { fetchVendorDeadlines } from './nonnaApi'
+import { CAN_EDIT, fetchVendorDeadlines } from './nonnaApi'
 import type { CounterpartyLibrary, LibraryClause, LibraryContract, LibrarySection, RelationshipNotes } from './nonnaApi'
 import { PlaybookBadge } from './Playbook'
 import { NotesStrip } from './RelationshipNotes'
@@ -142,19 +142,20 @@ function Attention({
     const a = status.playbook[c.id]
     return status.agreed.has(c.id) && a && a.tier === 'outside' && !a.exception
   }).length
-
+  // Calls to make, terms to review, and playbook flags are the legal team's to-do list.
+  // Read-only users can't act on them, so they only see the next deadline.
   const items = [
-    openCalls > 0 && (
+    CAN_EDIT && openCalls > 0 && (
       <button key="calls" type="button" className="attention-chip attention-urgent" onClick={onShowCalls}>
         ⚖ {openCalls} which-term-controls {openCalls === 1 ? 'call' : 'calls'} to make ↓
       </button>
     ),
-    pending > 0 && (
+    CAN_EDIT && pending > 0 && (
       <span key="pending" className="attention-chip">
         {pending} {pending === 1 ? 'term' : 'terms'} waiting in Review
       </span>
     ),
-    offPlaybook > 0 && (
+    CAN_EDIT && offPlaybook > 0 && (
       <span key="playbook" className="attention-chip attention-urgent">
         {offPlaybook} agreed {offPlaybook === 1 ? 'term' : 'terms'} off playbook
       </span>
@@ -166,9 +167,10 @@ function Attention({
     ),
   ].filter(Boolean)
 
+  if (!CAN_EDIT && items.length === 0) return null
   return (
     <section className="overview-section">
-      <p className="overview-label">Needs your attention</p>
+      <p className="overview-label">{CAN_EDIT ? 'Needs your attention' : 'Coming up'}</p>
       {items.length === 0 ? (
         <p className="attention-none">✓ Nothing needs your attention right now.</p>
       ) : (

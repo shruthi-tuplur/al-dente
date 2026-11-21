@@ -4,6 +4,7 @@ Run it from the repo root:
     uv run uvicorn nonna.api:app --reload
 
 Then open http://127.0.0.1:8000/docs to try every endpoint in the browser.
+The actual data work lives in lookups.py, so these endpoints stay thin.
 """
 
 from typing import Annotated
@@ -12,110 +13,44 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import DBAPIError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from nonna import (
-    amendments, chat, contract_fixes, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar,
+    access, amendments, chat, contract_fixes, deadlines, drafting, explain, extraction, gc_exceptions, google_calendar,
     history, intake, lookups, notes, playbook, precedence, reviews, sections,
 )
 from nonna.database import get_session
 from nonna.models import Clause, Contract
-from nonna.models import (
-    Clause,
-    Contract,
-    Counterparty,
-    CounterpartyPosition,
-    ReviewDecision,
-)
 from nonna.schemas import (
-    ClauseOut,
+    ChatRequest,
+    ChatResponse,
     ClauseType,
     ContractText,
-    ContractOut,
+    CounterpartyLibrary,
     CounterpartyDetail,
     CounterpartySummary,
+    Deadlines,
     DecisionOut,
-    EntityOut,
     HistoryEntry,
     PlaybookExceptionOut,
     PositionOut,
     ReviewIn,
     ReviewQueueItem,
-    SourceContract,
-    TermOut,
-    ChatRequest,
-    ChatResponse,
-    CounterpartyLibrary,
-    Deadlines,
 )
 
 app = FastAPI(
     title="Nonna",
     description="Counterparty clause library: remembers what was agreed with each counterparty.",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
-# What a review decision does to the clause's review status
-STATUS_FOR_ACTION = {
-    "approved": "approved",
-    "approved_change": "approved",
-    "corrected": "corrected",
-    "rejected": "rejected",
-}
 
+def not_found(error: lookups.NotFound) -> HTTPException:
+    return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
 
-# ---------------------------------------------------------------------------
-# Helpers that turn database objects into API responses
-# ---------------------------------------------------------------------------
-
-def to_source(contract: Contract) -> SourceContract:
-    return SourceContract(
-        id=contract.id,
-        contract_type=contract.contract_type,
-        title=contract.title,
-        effective_date=contract.effective_date,
-    )
-
-
-def to_clause(clause: Clause) -> ClauseOut:
-    return ClauseOut(
-        id=clause.id,
-        clause_type=clause.clause_type,
-        section_number=clause.section_number,
-        heading=clause.heading,
-        full_text=clause.full_text,
-        presence=clause.presence,
-        extraction_method=clause.extraction_method,
-        confidence=clause.confidence,
-        review_status=clause.review_status,
-        terms=[TermOut(term_key=t.term_key, value=t.value, unit=t.unit) for t in clause.terms],
-    )
-
-
-def to_decision(decision: ReviewDecision) -> DecisionOut:
-    return DecisionOut(
-        id=decision.id,
-        clause_id=decision.clause_id,
-        action=decision.action,
-        note=decision.note,
-        reviewer=decision.reviewer,
-        created_at=decision.created_at,
-    )
-
-
-def get_counterparty_or_404(session: Session, counterparty_id: int) -> Counterparty:
-    counterparty = session.get(Counterparty, counterparty_id)
-    if counterparty is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Counterparty not found.")
-    return counterparty
-
-
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 @app.get("/health")
 def health(session: SessionDep) -> dict[str, str]:
@@ -127,51 +62,16 @@ def health(session: SessionDep) -> dict[str, str]:
 @app.get("/counterparties", response_model=list[CounterpartySummary])
 def list_counterparties(session: SessionDep) -> list[CounterpartySummary]:
     """All counterparties, with how many contracts each has."""
-    rows = session.execute(
-        select(Counterparty.id, Counterparty.name, func.count(Contract.id))
-        .outerjoin(Contract, Contract.counterparty_id == Counterparty.id)
-        .group_by(Counterparty.id)
-        .order_by(Counterparty.name)
-    ).all()
-    return [CounterpartySummary(id=i, name=n, contract_count=c) for i, n, c in rows]
+    return lookups.list_counterparties(session)
 
 
 @app.get("/counterparties/{counterparty_id}", response_model=CounterpartyDetail)
 def get_counterparty(counterparty_id: int, session: SessionDep) -> CounterpartyDetail:
     """One counterparty's signing entities and contracts, oldest first."""
-    counterparty = session.scalars(
-        select(Counterparty)
-        .where(Counterparty.id == counterparty_id)
-        .options(
-            selectinload(Counterparty.entities),
-            selectinload(Counterparty.contracts).selectinload(Contract.entity),
-        )
-    ).one_or_none()
-    if counterparty is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Counterparty not found.")
-
-    return CounterpartyDetail(
-        id=counterparty.id,
-        name=counterparty.name,
-        entities=[
-            EntityOut(id=e.id, legal_name=e.legal_name, jurisdiction=e.jurisdiction)
-            for e in counterparty.entities
-        ],
-        contracts=[
-            ContractOut(
-                id=c.id,
-                contract_type=c.contract_type,
-                title=c.title,
-                effective_date=c.effective_date,
-                expiration_date=c.expiration_date,
-                status=c.status,
-                signed_by_entity=c.entity.legal_name,
-                parent_contract_id=c.parent_contract_id,
-                amends_contract_id=c.amends_contract_id,
-            )
-            for c in counterparty.contracts
-        ],
-    )
+    try:
+        return lookups.get_counterparty_detail(session, counterparty_id)
+    except lookups.NotFound as error:
+        raise not_found(error) from error
 
 
 @app.get("/counterparties/{counterparty_id}/positions", response_model=list[PositionOut])
@@ -179,34 +79,10 @@ def get_positions(
     counterparty_id: int, session: SessionDep, include_superseded: bool = False
 ) -> list[PositionOut]:
     """The agreed baselines with a counterparty. Add ?include_superseded=true for past ones."""
-    get_counterparty_or_404(session, counterparty_id)
-
-    query = (
-        select(CounterpartyPosition)
-        .where(CounterpartyPosition.counterparty_id == counterparty_id)
-        .options(
-            selectinload(CounterpartyPosition.baseline_clause).selectinload(Clause.terms),
-            selectinload(CounterpartyPosition.baseline_clause).selectinload(Clause.contract),
-        )
-        .order_by(CounterpartyPosition.clause_type, CounterpartyPosition.set_at)
-    )
-    if not include_superseded:
-        query = query.where(CounterpartyPosition.superseded_at.is_(None))
-
-    return [
-        PositionOut(
-            id=p.id,
-            clause_type=p.clause_type,
-            applies_to=p.contract_type_scope,
-            is_current=p.is_current,
-            set_by=p.set_by,
-            set_at=p.set_at,
-            note=p.note,
-            source=to_source(p.baseline_clause.contract),
-            clause=to_clause(p.baseline_clause),
-        )
-        for p in session.scalars(query)
-    ]
+    try:
+        return lookups.get_positions(session, counterparty_id, include_superseded)
+    except lookups.NotFound as error:
+        raise not_found(error) from error
 
 
 @app.get(
@@ -217,30 +93,10 @@ def get_clause_history(
     counterparty_id: int, clause_type: ClauseType, session: SessionDep
 ) -> list[HistoryEntry]:
     """How one clause type changed across a counterparty's contracts, oldest first."""
-    get_counterparty_or_404(session, counterparty_id)
-
-    clauses = session.scalars(
-        select(Clause)
-        .join(Clause.contract)
-        .where(
-            Contract.counterparty_id == counterparty_id,
-            Clause.clause_type == clause_type.value,
-        )
-        .options(
-            selectinload(Clause.terms),
-            selectinload(Clause.decisions),
-            selectinload(Clause.contract),
-        )
-        .order_by(Contract.effective_date, Contract.id)
-    )
-    return [
-        HistoryEntry(
-            source=to_source(c.contract),
-            clause=to_clause(c),
-            decisions=[to_decision(d) for d in c.decisions],
-        )
-        for c in clauses
-    ]
+    try:
+        return lookups.get_clause_history(session, counterparty_id, clause_type.value)
+    except lookups.NotFound as error:
+        raise not_found(error) from error
 
 
 @app.get("/review-queue", response_model=list[ReviewQueueItem])
@@ -248,34 +104,14 @@ def get_review_queue(
     session: SessionDep, counterparty_id: int | None = None
 ) -> list[ReviewQueueItem]:
     """Extracted clauses waiting for an attorney. Filter with ?counterparty_id=."""
-    query = (
-        select(Clause)
-        .join(Clause.contract)
-        .where(Clause.review_status == "pending")
-        .options(
-            selectinload(Clause.terms),
-            selectinload(Clause.contract).selectinload(Contract.counterparty),
-        )
-        .order_by(Contract.uploaded_at, Clause.id)
-    )
-    if counterparty_id is not None:
-        query = query.where(Contract.counterparty_id == counterparty_id)
-
-    return [
-        ReviewQueueItem(
-            counterparty_id=c.contract.counterparty_id,
-            counterparty_name=c.contract.counterparty.name,
-            source=to_source(c.contract),
-            clause=to_clause(c),
-        )
-        for c in session.scalars(query)
-    ]
+    return lookups.get_review_queue(session, counterparty_id)
 
 
 @app.post(
     "/clauses/{clause_id}/reviews",
     response_model=reviews.ReviewOutcome,
     status_code=status.HTTP_201_CREATED,
+    dependencies=access.AttorneyOnly,
 )
 def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> reviews.ReviewOutcome:
     """Record an attorney's decision about a clause and keep the counterparty's baseline up to date.
@@ -302,18 +138,18 @@ def review_clause(clause_id: int, review: ReviewIn, session: SessionDep) -> revi
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat_with_nonna(request: ChatRequest, session: SessionDep) -> ChatResponse:
-    """Ask Nonna a question. She answers from the database and returns cards to show."""
+def chat_with_nonna(request: ChatRequest, session: SessionDep, role: access.RoleDep) -> ChatResponse:
+    """Ask Nonna a question. She answers from the database and returns cards to show.
+
+    Anyone can chat. Read-only users get the lookup tools only (no drafting).
+    """
     try:
-        return chat.run_chat(session, request.messages)
+        return chat.run_chat(session, request.messages, role)
     except chat.ChatUnavailable as error:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
 
 
-
-
-
-@app.post("/contracts/intake", response_model=intake.IntakeProposal)
+@app.post("/contracts/intake", response_model=intake.IntakeProposal, dependencies=access.AttorneyOnly)
 def contract_intake(file: UploadFile, session: SessionDep) -> intake.IntakeProposal:
     """Upload a contract. Nonna reads it and proposes its details. Nothing is saved to the database yet."""
     data = file.file.read(intake.MAX_UPLOAD_BYTES + 1)
@@ -323,9 +159,12 @@ def contract_intake(file: UploadFile, session: SessionDep) -> intake.IntakePropo
         raise HTTPException(422, str(error)) from error
 
 
-
-
-@app.post("/contracts", response_model=intake.SavedContract, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/contracts",
+    response_model=intake.SavedContract,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=access.AttorneyOnly,
+)
 def save_contract(confirm: intake.IntakeConfirm, session: SessionDep) -> intake.SavedContract:
     """Save an uploaded contract after the attorney confirms its details."""
     try:
@@ -334,9 +173,11 @@ def save_contract(confirm: intake.IntakeConfirm, session: SessionDep) -> intake.
         raise HTTPException(422, str(error)) from error
 
 
-
-
-@app.post("/contracts/{contract_id}/extract", response_model=extraction.ExtractionResult)
+@app.post(
+    "/contracts/{contract_id}/extract",
+    response_model=extraction.ExtractionResult,
+    dependencies=access.AttorneyOnly,
+)
 def extract_contract(contract_id: int, session: SessionDep) -> extraction.ExtractionResult:
     """Pull the key terms out of a saved contract. Everything is saved as pending review."""
     try:
@@ -351,7 +192,11 @@ def extract_contract(contract_id: int, session: SessionDep) -> extraction.Extrac
     return result
 
 
-@app.put("/contracts/{contract_id}", response_model=contract_fixes.FixOutcome)
+@app.put(
+    "/contracts/{contract_id}",
+    response_model=contract_fixes.FixOutcome,
+    dependencies=access.AttorneyOnly,
+)
 def fix_contract(contract_id: int, fix: contract_fixes.FixIn, session: SessionDep) -> contract_fixes.FixOutcome:
     """Fix an upload's details: title, type, date, vendor, or what it falls under. Needs a note."""
     try:
@@ -362,7 +207,11 @@ def fix_contract(contract_id: int, fix: contract_fixes.FixIn, session: SessionDe
         raise HTTPException(422, str(error)) from error
 
 
-@app.post("/contracts/{contract_id}/delete", response_model=contract_fixes.FixOutcome)
+@app.post(
+    "/contracts/{contract_id}/delete",
+    response_model=contract_fixes.FixOutcome,
+    dependencies=access.AttorneyOnly,
+)
 def delete_contract(contract_id: int, change: contract_fixes.DeleteIn, session: SessionDep) -> contract_fixes.FixOutcome:
     """Delete an upload that was a mistake. Only before anything from it was reviewed."""
     try:
@@ -372,6 +221,7 @@ def delete_contract(contract_id: int, change: contract_fixes.DeleteIn, session: 
     except contract_fixes.ReviewRejected as error:
         raise HTTPException(422, str(error)) from error
 
+
 @app.get("/counterparties/{counterparty_id}/library", response_model=CounterpartyLibrary)
 def get_counterparty_library(counterparty_id: int, session: SessionDep) -> CounterpartyLibrary:
     """Every contract with a counterparty, each with all of its extracted clauses."""
@@ -379,8 +229,6 @@ def get_counterparty_library(counterparty_id: int, session: SessionDep) -> Count
         return lookups.get_counterparty_library(session, counterparty_id)
     except lookups.NotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-
-
 
 
 @app.get("/contracts/{contract_id}/text", response_model=ContractText)
@@ -413,14 +261,12 @@ def get_contract_file(contract_id: int, session: SessionDep) -> FileResponse:
     return FileResponse(path, media_type=media_type, content_disposition_type="inline")
 
 
-
 @app.get("/deadlines", response_model=Deadlines)
 def get_deadlines(
     session: SessionDep, within_days: int | None = None, counterparty_id: int | None = None
 ) -> Deadlines:
     """Expirations, renewals, and notice deadlines for active contracts, soonest first."""
     return deadlines.get_deadlines(session, within_days, counterparty_id)
-
 
 
 @app.get("/contracts/{contract_id}/as-amended", response_model=amendments.AmendedContract)
@@ -432,12 +278,11 @@ def get_contract_as_amended(contract_id: int, session: SessionDep) -> amendments
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
 
 
-
-
 @app.get("/playbook", response_model=playbook.PlaybookCheck)
 def get_playbook(session: SessionDep, counterparty_id: int | None = None) -> playbook.PlaybookCheck:
     """Aurelia's playbook, and how every vendor's agreed terms measure up against it."""
     return playbook.check_vendors(session, counterparty_id)
+
 
 @app.get("/counterparties/{counterparty_id}/decisions", response_model=history.DecisionHistory)
 def get_decision_history(counterparty_id: int, session: SessionDep) -> history.DecisionHistory:
@@ -446,6 +291,7 @@ def get_decision_history(counterparty_id: int, session: SessionDep) -> history.D
         return history.get_history(session, counterparty_id)
     except history.NotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+
 
 @app.get("/counterparties/{counterparty_id}/notes", response_model=notes.NotesOut)
 def get_relationship_notes(counterparty_id: int, session: SessionDep) -> notes.NotesOut:
@@ -456,7 +302,12 @@ def get_relationship_notes(counterparty_id: int, session: SessionDep) -> notes.N
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
 
 
-@app.post("/counterparties/{counterparty_id}/notes", response_model=notes.NoteOut, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/counterparties/{counterparty_id}/notes",
+    response_model=notes.NoteOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=access.AttorneyOnly,
+)
 def add_relationship_note(counterparty_id: int, note: notes.NoteIn, session: SessionDep) -> notes.NoteOut:
     try:
         return notes.add_note(session, counterparty_id, note)
@@ -466,7 +317,7 @@ def add_relationship_note(counterparty_id: int, note: notes.NoteIn, session: Ses
         raise HTTPException(422, str(error)) from error
 
 
-@app.post("/notes/{note_id}/archive", response_model=notes.NoteOut)
+@app.post("/notes/{note_id}/archive", response_model=notes.NoteOut, dependencies=access.AttorneyOnly)
 def archive_relationship_note(note_id: int, change: notes.ArchiveIn, session: SessionDep) -> notes.NoteOut:
     """Archive a note. It stays in the history, it just stops showing as current."""
     try:
@@ -490,6 +341,7 @@ def get_precedence(counterparty_id: int, session: SessionDep) -> precedence.Prec
     "/clauses/{clause_id}/precedence-call",
     response_model=precedence.ControlCall,
     status_code=status.HTTP_201_CREATED,
+    dependencies=access.AttorneyOnly,
 )
 def record_precedence_call(clause_id: int, call: precedence.CallIn, session: SessionDep) -> precedence.ControlCall:
     """Save the attorney's call on which term controls for one SOW term. Append-only."""
@@ -500,10 +352,12 @@ def record_precedence_call(clause_id: int, call: precedence.CallIn, session: Ses
     except precedence.ReviewRejected as error:
         raise HTTPException(422, str(error)) from error
 
+
 @app.post(
     "/clauses/{clause_id}/playbook-exception",
     response_model=PlaybookExceptionOut,
     status_code=status.HTTP_201_CREATED,
+    dependencies=access.AttorneyOnly,
 )
 def record_playbook_exception(
     clause_id: int, change: gc_exceptions.ExceptionIn, session: SessionDep
@@ -517,7 +371,11 @@ def record_playbook_exception(
         raise HTTPException(422, str(error)) from error
 
 
-@app.post("/playbook-exceptions/{exception_id}/withdraw", status_code=status.HTTP_204_NO_CONTENT)
+@app.post(
+    "/playbook-exceptions/{exception_id}/withdraw",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=access.AttorneyOnly,
+)
 def withdraw_playbook_exception(exception_id: int, change: gc_exceptions.WithdrawIn, session: SessionDep) -> Response:
     """Withdraw a GC exception. It stays in the history, and the term is flagged again."""
     try:
@@ -528,7 +386,8 @@ def withdraw_playbook_exception(exception_id: int, change: gc_exceptions.Withdra
         raise HTTPException(422, str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-@app.put("/playbook/{clause_type}", response_model=playbook.RuleOut)
+
+@app.put("/playbook/{clause_type}", response_model=playbook.RuleOut, dependencies=access.AttorneyOnly)
 def update_playbook_rule(clause_type: str, change: playbook.RuleIn, session: SessionDep) -> playbook.RuleOut:
     """Save a new version of one playbook rule. The old version is kept as history."""
     try:
@@ -537,10 +396,11 @@ def update_playbook_rule(clause_type: str, change: playbook.RuleIn, session: Ses
         raise HTTPException(422, str(error)) from error
 
 
-
-
-
-@app.post("/counterparties/{counterparty_id}/drafts", response_model=drafting.Draft)
+@app.post(
+    "/counterparties/{counterparty_id}/drafts",
+    response_model=drafting.Draft,
+    dependencies=access.AttorneyOnly,
+)
 def make_draft(counterparty_id: int, change: drafting.DraftIn, session: SessionDep) -> drafting.Draft:
     """Start a new SOW from this vendor's last one and the attorney's brief. Nothing is saved."""
     try:
@@ -549,7 +409,7 @@ def make_draft(counterparty_id: int, change: drafting.DraftIn, session: SessionD
         raise HTTPException(422, str(error)) from error
 
 
-@app.post("/drafts/docx")
+@app.post("/drafts/docx", dependencies=access.AttorneyOnly)
 def download_draft(draft: drafting.Draft) -> Response:
     """The reviewed draft (with any edits) as a Word file."""
     filename = drafting.docx_name(draft)
@@ -558,8 +418,6 @@ def download_draft(draft: drafting.Draft) -> Response:
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -593,7 +451,11 @@ def calendar_callback(state: str = "", code: str = "", error: str = "") -> HTMLR
     return HTMLResponse(google_calendar.sign_in_page(True, "Google Calendar is connected to Nonna. This window will close."))
 
 
-@app.post("/google-calendar/sync", response_model=google_calendar.SyncResult)
+@app.post(
+    "/google-calendar/sync",
+    response_model=google_calendar.SyncResult,
+    dependencies=access.AttorneyOnly,
+)
 def calendar_sync(session: SessionDep) -> google_calendar.SyncResult:
     try:
         return google_calendar.sync(session)
@@ -601,13 +463,15 @@ def calendar_sync(session: SessionDep) -> google_calendar.SyncResult:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
 
 
-@app.post("/google-calendar/disconnect", response_model=google_calendar.CalendarStatus)
+@app.post(
+    "/google-calendar/disconnect",
+    response_model=google_calendar.CalendarStatus,
+    dependencies=access.AttorneyOnly,
+)
 def calendar_disconnect() -> google_calendar.CalendarStatus:
     """Forget the Google sign-in. The Nonna deadlines calendar stays in Google until you delete it."""
     google_calendar.disconnect()
     return google_calendar.status()
-
-
 
 
 @app.post("/explain", response_model=explain.Explanation)

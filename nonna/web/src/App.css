@@ -3552,3 +3552,61 @@ button.attention-chip:hover {
     --drawer-width: 100vw;
   }
 }
+
+
+/* Who's using Nonna: demo user switcher, and the read-only note for business users */
+.header-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px 16px;
+}
+
+.user-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--espresso-muted);
+}
+
+.user-switch select {
+  padding: 5px 10px;
+  border: 1px solid #e6e0d8;
+  border-radius: 9999px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  color: var(--espresso);
+  cursor: pointer;
+}
+
+.user-switch select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--saffron-glow);
+}
+
+.user-switch-badge {
+  background: rgba(224, 176, 94, 0.25);
+  color: var(--espresso);
+}
+
+.read-only-banner {
+  margin: 4px 40px 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(224, 176, 94, 0.18);
+  font-size: 14px;
+  color: var(--espresso);
+}
+
+@media (max-width: 760px) {
+  .user-switch-label {
+    display: none;
+  }
+
+  .read-only-banner {
+    margin: 4px 16px 0;
+  }
+}
